@@ -358,6 +358,5 @@ appsettings.Development.json
 src/Marketplace.SaaS.Accelerator.AdminSite/appsettings.Development.json
 src/Marketplace.SaaS.Accelerator.MeteredTriggerJob/appsettings.Development.json
 src/Marketplace.SaaS.Accelerator.CustomerSite/appsettings.Development.json
-
-.vscode/launch.json
-.vscode/tasks.json
+src/AdminSite/appsettings.Development.json
+src/CustomerSite/appsettings.Development.json

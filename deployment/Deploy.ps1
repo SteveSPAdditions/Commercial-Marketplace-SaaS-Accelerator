@@ -178,6 +178,28 @@ $azCliOutput = if($Quiet){'none'} else {'json'}
 
 #endregion
 
+# RBAC-aware helper for Key Vault access (safe to add near other helpers)
+function Grant-KvAccessForPrincipal {
+  param(
+    [Parameter(Mandatory=$true)][string]$KeyVault,
+    [Parameter(Mandatory=$true)][string]$ResourceGroupForDeployment,
+    [Parameter(Mandatory=$true)][string]$PrincipalId,
+    [Parameter(Mandatory=$true)][string]$AzCliOut
+  )
+  $kvInfo = az keyvault show --name $KeyVault --resource-group $ResourceGroupForDeployment | ConvertFrom-Json
+  if ($kvInfo.properties.enableRbacAuthorization -eq $true) {
+    $existing = az role assignment list --assignee $PrincipalId --scope $kvInfo.id --role "Key Vault Secrets User" | ConvertFrom-Json
+    if (-not $existing) {
+      az role assignment create --role "Key Vault Secrets User" --assignee $PrincipalId --scope $kvInfo.id --output $AzCliOut | Out-Null
+    }
+  } else {
+    $existingPolicy = $kvInfo.properties.accessPolicies | Where-Object { $_.objectId -eq $PrincipalId }
+    if (-not $existingPolicy) {
+      az keyvault set-policy --name $KeyVault --object-id $PrincipalId --secret-permissions get list --key-permissions get list --resource-group $ResourceGroupForDeployment --output $AzCliOut | Out-Null
+    }
+  }
+}
+
 #region Validate Parameters
 
 if($WebAppNamePrefix.Length -gt 21) {
@@ -211,17 +233,14 @@ Write-Host "Starting SaaS Accelerator Deployment..."
 
 
 #region Check If SQL Server Exist
-$sql_exists = Get-AzureRmSqlServer -ServerName $SQLServerName -ResourceGroupName $ResourceGroupForDeployment -ErrorAction SilentlyContinue
-if ($sql_exists) 
+$sql_exists = Get-AzSqlServer -ServerName $SQLServerName -ResourceGroupName $ResourceGroupForDeployment -ErrorAction SilentlyContinue
+if ($sql_exists)
 {
 	Write-Host ""
-	Write-Host "🛑 SQl Server name " -NoNewline -ForegroundColor Red
-	Write-Host "$SQLServerName"   -NoNewline -ForegroundColor Red -BackgroundColor Yellow
-	Write-Host " already exists." -ForegroundColor Red
-	Write-Host "Please delete existing instance or use new sql Instance name by using parameter" -NoNewline 
-	Write-Host " -SQLServerName"   -ForegroundColor Green
-    exit 1
-}  
+	Write-Host "ℹ️ SQL Server " -NoNewline -ForegroundColor Yellow
+	Write-Host "$SQLServerName" -NoNewline
+	Write-Host " already exists, skipping creation." -ForegroundColor Yellow
+}
 #endregion
 
 #region Dowloading assets if provided
@@ -510,26 +529,35 @@ az network vnet subnet create --resource-group $ResourceGroupForDeployment --vne
 az network vnet subnet create --resource-group $ResourceGroupForDeployment --vnet-name $VnetName -n $SqlSubnetName --address-prefixes "10.0.2.0/24"  --output $azCliOutput 
 az network vnet subnet create --resource-group $ResourceGroupForDeployment --vnet-name $VnetName -n $KvSubnetName --address-prefixes "10.0.3.0/24"   --output $azCliOutput 
 
-Write-host "      ➡️ Create Sql Server"
-$userId = az ad signed-in-user show --query id -o tsv 
-$userdisplayname = az ad signed-in-user show --query displayName -o tsv 
-az sql server create --name $SQLServerName --resource-group $ResourceGroupForDeployment --location $Location  --enable-ad-only-auth --external-admin-principal-type User --external-admin-name $userdisplayname --external-admin-sid $userId --output $azCliOutput
-Write-host "      ➡️ Set minimalTlsVersion to 1.2"
-az sql server update --name $SQLServerName --resource-group $ResourceGroupForDeployment --set minimalTlsVersion="1.2"
-Write-host "      ➡️ Add SQL Server Firewall rules"
-az sql server firewall-rule create --resource-group $ResourceGroupForDeployment --server $SQLServerName -n AllowAzureIP --start-ip-address "0.0.0.0" --end-ip-address "0.0.0.0" --output $azCliOutput
-if ($env:ACC_CLOUD -eq $null){
-    Write-host "      ➡️ Running in local environment - Add current IP to firewall"
-	$publicIp = (Invoke-WebRequest -uri "https://api.ipify.org").Content
-    az sql server firewall-rule create --resource-group $ResourceGroupForDeployment --server $SQLServerName -n AllowIP --start-ip-address "$publicIp" --end-ip-address "$publicIp" --output $azCliOutput
-}
+if (-not $sql_exists) {
+    Write-host "      ➡️ Create Sql Server"
+    $userId = az ad signed-in-user show --query id -o tsv
+    $userdisplayname = az ad signed-in-user show --query displayName -o tsv
+    az sql server create --name $SQLServerName --resource-group $ResourceGroupForDeployment --location $Location  --enable-ad-only-auth --external-admin-principal-type User --external-admin-name $userdisplayname --external-admin-sid $userId --output $azCliOutput
+    Write-host "      ➡️ Set minimalTlsVersion to 1.2"
+    az sql server update --name $SQLServerName --resource-group $ResourceGroupForDeployment --set minimalTlsVersion="1.2"
+    Write-host "      ➡️ Add SQL Server Firewall rules"
+    az sql server firewall-rule create --resource-group $ResourceGroupForDeployment --server $SQLServerName -n AllowAzureIP --start-ip-address "0.0.0.0" --end-ip-address "0.0.0.0" --output $azCliOutput
+    if ($null -eq $env:ACC_CLOUD){
+        Write-host "      ➡️ Running in local environment - Add current IP to firewall"
+        $publicIp = (Invoke-WebRequest -uri "https://api.ipify.org").Content
+        az sql server firewall-rule create --resource-group $ResourceGroupForDeployment --server $SQLServerName -n AllowIP --start-ip-address "$publicIp" --end-ip-address "$publicIp" --output $azCliOutput
+    }
 
-Write-host "      ➡️ Create SQL DB"
-az sql db create --resource-group $ResourceGroupForDeployment --server $SQLServerName --name $SQLDatabaseName  --edition Standard  --capacity 10 --zone-redundant false --output $azCliOutput
+    Write-host "      ➡️ Create SQL DB"
+    az sql db create --resource-group $ResourceGroupForDeployment --server $SQLServerName --name $SQLDatabaseName  --edition Standard  --capacity 10 --zone-redundant false --output $azCliOutput
+}
 
 Write-host "   🔵 KeyVault"
 Write-host "      ➡️ Create KeyVault"
-az keyvault create --name $KeyVault --resource-group $ResourceGroupForDeployment --enable-rbac-authorization false --output $azCliOutput
+az keyvault create --name $KeyVault --resource-group $ResourceGroupForDeployment --enable-rbac-authorization true --output $azCliOutput
+Write-host "      ➡️ Grant deploying user Key Vault Secrets Officer role"
+$kvId = az keyvault show --name $KeyVault --resource-group $ResourceGroupForDeployment --query id -o tsv
+$currentUserId = az ad signed-in-user show --query id -o tsv
+$existingOfficerRole = az role assignment list --assignee $currentUserId --scope $kvId --role "Key Vault Secrets Officer" | ConvertFrom-Json
+if (-not $existingOfficerRole) {
+    az role assignment create --role "Key Vault Secrets Officer" --assignee $currentUserId --scope $kvId --output $azCliOutput | Out-Null
+}
 Write-host "      ➡️ Add Secrets"
 az keyvault secret set --vault-name $KeyVault --name ADApplicationSecret --value="$ADApplicationSecret" --output $azCliOutput
 az keyvault secret set --vault-name $KeyVault --name DefaultConnection --value $Connection --output $azCliOutput
@@ -547,7 +575,7 @@ az webapp create -g $ResourceGroupForDeployment -p $WebAppNameService -n $WebApp
 Write-host "      ➡️ Assign Identity"
 $WebAppNameAdminId = az webapp identity assign -g $ResourceGroupForDeployment  -n $WebAppNameAdmin --identities [system] --query principalId -o tsv
 Write-host "      ➡️ Setup access to KeyVault"
-az keyvault set-policy --name $KeyVault  --object-id $WebAppNameAdminId --secret-permissions get list --key-permissions get list --resource-group $ResourceGroupForDeployment --output $azCliOutput
+Grant-KvAccessForPrincipal -KeyVault $KeyVault -ResourceGroupForDeployment $ResourceGroupForDeployment -PrincipalId $WebAppNameAdminId -AzCliOut $azCliOutput
 Write-host "      ➡️ Set Configuration"
 az webapp config connection-string set -g $ResourceGroupForDeployment -n $WebAppNameAdmin -t SQLAzure --output $azCliOutput --settings DefaultConnection=$DefaultConnectionKeyVault 
 az webapp config appsettings set -g $ResourceGroupForDeployment  -n $WebAppNameAdmin --output $azCliOutput --settings KnownUsers=$PublisherAdminUsers SaaSApiConfiguration__AdAuthenticationEndPoint=https://login.microsoftonline.com SaaSApiConfiguration__ClientId=$ADApplicationID SaaSApiConfiguration__ClientSecret=$ADApplicationSecretKeyVault SaaSApiConfiguration__FulFillmentAPIBaseURL=https://marketplaceapi.microsoft.com/api SaaSApiConfiguration__FulFillmentAPIVersion=2018-08-31 SaaSApiConfiguration__GrantType=client_credentials SaaSApiConfiguration__MTClientId=$ADApplicationIDAdmin SaaSApiConfiguration__IsAdminPortalMultiTenant=$IsAdminPortalMultiTenant SaaSApiConfiguration__Resource=20e940b3-4c77-4b0b-9a53-9e16a1b010a7 SaaSApiConfiguration__TenantId=$TenantID SaaSApiConfiguration__SignedOutRedirectUri=https://$WebAppNamePrefix-admin.azurewebsites.net/Home/Index/ SaaSApiConfiguration_CodeHash=$SaaSApiConfiguration_CodeHash
@@ -559,7 +587,7 @@ az webapp create -g $ResourceGroupForDeployment -p $WebAppNameService -n $WebApp
 Write-host "      ➡️ Assign Identity"
 $WebAppNamePortalId= az webapp identity assign -g $ResourceGroupForDeployment  -n $WebAppNamePortal --identities [system] --query principalId -o tsv 
 Write-host "      ➡️ Setup access to KeyVault"
-az keyvault set-policy --name $KeyVault  --object-id $WebAppNamePortalId --secret-permissions get list --key-permissions get list --resource-group $ResourceGroupForDeployment --output $azCliOutput
+Grant-KvAccessForPrincipal -KeyVault $KeyVault -ResourceGroupForDeployment $ResourceGroupForDeployment -PrincipalId $WebAppNamePortalId -AzCliOut $azCliOutput
 Write-host "      ➡️ Set Configuration"
 az webapp config connection-string set -g $ResourceGroupForDeployment -n $WebAppNamePortal -t SQLAzure --output $azCliOutput --settings DefaultConnection=$DefaultConnectionKeyVault
 az webapp config appsettings set -g $ResourceGroupForDeployment  -n $WebAppNamePortal --output $azCliOutput --settings SaaSApiConfiguration__AdAuthenticationEndPoint=https://login.microsoftonline.com SaaSApiConfiguration__ClientId=$ADApplicationID SaaSApiConfiguration__ClientSecret=$ADApplicationSecretKeyVault SaaSApiConfiguration__FulFillmentAPIBaseURL=https://marketplaceapi.microsoft.com/api SaaSApiConfiguration__FulFillmentAPIVersion=2018-08-31 SaaSApiConfiguration__GrantType=client_credentials SaaSApiConfiguration__MTClientId=$ADMTApplicationIDPortal SaaSApiConfiguration__Resource=20e940b3-4c77-4b0b-9a53-9e16a1b010a7 SaaSApiConfiguration__TenantId=$TenantID SaaSApiConfiguration__SignedOutRedirectUri=https://$WebAppNamePrefix-portal.azurewebsites.net/Home/Index/ SaaSApiConfiguration_CodeHash=$SaaSApiConfiguration_CodeHash
@@ -575,6 +603,31 @@ Write-host "      ➡️ Generate SQL schema/data script"
 $ConnectionString="Server=tcp:"+$ServerUri+";Database="+$SQLDatabaseName+";Authentication=Active Directory Default;"
 Set-Content -Path ../src/AdminSite/appsettings.Development.json -value "{`"ConnectionStrings`": {`"DefaultConnection`":`"$ConnectionString`"}}"
 dotnet-ef migrations script  --output script.sql --idempotent --context SaaSKitContext --project ../src/DataAccess/DataAccess.csproj --startup-project ../src/AdminSite/AdminSite.csproj
+
+# ... existing line:
+# dotnet-ef migrations script --output script.sql --idempotent --context SaaSKitContext --project ../src/DataAccess/DataAccess.csproj --startup-project ../src/AdminSite/AdminSite.csproj
+
+# UK-safe normalization: convert 'dd/MM/yyyy[ HH:mm:ss]' to ISO-8601 and prepend DATEFORMAT
+$scriptPath = Join-Path $PWD 'script.sql'
+$raw = Get-Content -Path $scriptPath -Raw
+$pattern = [regex]"'(?<d>\d{1,2})/(?<m>\d{1,2})/(?<y>\d{2,4})(?: (?<H>\d{1,2}):(?<N>\d{2}):(?<S>\d{2}))?'"
+$norm = $pattern.Replace($raw, {
+    param($m)
+    $d  = [int]$m.Groups['d'].Value
+    $mo = [int]$m.Groups['m'].Value
+    $y  = [int]$m.Groups['y'].Value
+    if ($y -lt 100) { $y += 2000 }
+    $H = if ($m.Groups['H'].Success) { [int]$m.Groups['H'].Value } else { 0 }
+    $N = if ($m.Groups['N'].Success) { [int]$m.Groups['N'].Value } else { 0 }
+    $S = if ($m.Groups['S'].Success) { [int]$m.Groups['S'].Value } else { 0 }
+    try {
+        $dt = [datetime]::new($y, $mo, $d, $H, $N, $S)   # interpret as d/M/y
+        if ($m.Groups['H'].Success) { return "'{0:yyyy-MM-ddTHH:mm:ss}'" -f $dt } else { return "'{0:yyyy-MM-dd}'" -f $dt }
+    } catch { return $m.Value }
+})
+$norm = "SET NOCOUNT ON;`r`nSET DATEFORMAT dmy;`r`n" + $norm
+Set-Content -Path $scriptPath -Value $norm -Encoding UTF8
+
 Write-host "      ➡️ Execute SQL schema/data script"
 Invoke-Sqlcmd -InputFile ./script.sql -ConnectionString $ConnectionString
 

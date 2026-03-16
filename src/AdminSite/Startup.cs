@@ -42,9 +42,10 @@ public class Startup
     /// Initializes a new instance of the <see cref="Startup"/> class.
     /// </summary>
     /// <param name="configuration">The configuration.</param>
-    public Startup(IConfiguration configuration)
+    public Startup(IConfiguration configuration, IWebHostEnvironment environment)
     {
         this.Configuration = configuration;
+        this.Environment = environment;
     }
 
     /// <summary>
@@ -54,6 +55,8 @@ public class Startup
     /// The configuration.
     /// </value>
     public IConfiguration Configuration { get; }
+
+    public IWebHostEnvironment Environment { get; }
 
     /// <summary>
     /// Configures the services.
@@ -101,6 +104,10 @@ public class Startup
             })
             .AddOpenIdConnect(options =>
             {
+                if (this.Environment.IsDevelopment())
+                {
+                    options.RequireHttpsMetadata = false;
+                }
 
                 if (boolMultiTenant == "false")
                 {
