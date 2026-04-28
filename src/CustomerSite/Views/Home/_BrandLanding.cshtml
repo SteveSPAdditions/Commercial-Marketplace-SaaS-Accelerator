@@ -1,0 +1,17 @@
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
+<script>document.body.classList.add('brand-landing');</script>
+@{
+    var brand = Config.GetSection("Brand");
+    var logo = brand["LogoPath"] ?? "/brand/sp-additions-logo.png";
+    var product = brand["ProductName"] ?? "Read and Understood";
+    var tagline = brand["ProductTagline"] ?? "Employee acknowledgement for SharePoint and Microsoft Teams";
+    var sub = brand["WelcomeSubHeadline"] ?? "Activate or manage your subscription. If you've just purchased on Microsoft Marketplace, return to your subscription and select Configure account to come back here with your activation token.";
+}
+
+<section class="brand-hero">
+    <div class="brand-hero__inner">
+        <img class="brand-hero__logo" src="@logo" alt="@product" />
+        <p class="brand-hero__eyebrow"><span class="brand-eyebrow-mark"></span>@product · @tagline</p>
+        <p class="brand-hero__sub">@sub</p>
+    </div>
+</section>

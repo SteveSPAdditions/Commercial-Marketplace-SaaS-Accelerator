@@ -1,0 +1,22 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Admin Site",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-admin",
+      "program": "${workspaceFolder}/src/AdminSite/bin/Debug/net8.0/AdminSite.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/src/AdminSite",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+      }
+    }
+  ]
+}

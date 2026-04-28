@@ -1,4 +1,4 @@
-﻿body {
+body {
     font-family: 'Segoe UI', 'sans-serif' !important;
     color: black !important;
     font-size: 16px !important;
@@ -62,7 +62,7 @@
     /*border-style: none;
     width: auto;
     padding: 8px;
-    
+
     width: 30%;*/
     border-style: none;
     width: auto;
@@ -359,4 +359,581 @@ a.cm-dropdown-option {
 }
 .red-star {
     color: red;
+}
+
+/* ==========================================================================
+   SP Additions / Read and Understood brand layer
+   Appended for fork-safe theming. Two scope strategies are used:
+     - `brand-` prefixed classes: entirely additive, no collision risk.
+     - Compound selectors like `body:not(:has(.brand-hero)) .cm-…`: scope
+       brand overrides to the authed/transactional surfaces only, leaving
+       the welcome screen untouched. No upstream rules are modified.
+   ========================================================================== */
+
+:root {
+    --brand-green-500: #7ca22b;
+    --brand-green-600: #6d8e26;
+    --brand-green-100: #eaf3d4;
+    --brand-burgundy-500: #8a292e;
+    --brand-burgundy-600: #6f1f23;
+    --brand-burgundy-100: #f5e1e2;
+    --brand-purple-500: #7b5394;
+    --brand-ink: #1f1f23;
+    --brand-ink-soft: #4a4a52;
+    --brand-mute: #6e6e76;
+    --brand-line: #e7e6e3;
+    --brand-bg: #faf8f5;
+    --brand-surface: #ffffff;
+    --brand-radius: 12px;
+    --brand-radius-sm: 6px;
+    --brand-shadow-sm: 0 1px 2px rgba(20, 20, 20, .04), 0 2px 8px rgba(20, 20, 20, .04);
+    --brand-shadow-lg: 0 6px 18px rgba(20, 20, 20, .06), 0 18px 40px rgba(20, 20, 20, .08);
+    --brand-font: "proxima-nova", "Proxima Nova", "Montserrat", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --brand-nav-height: 56px; /* keep aligned with .navbar.brand-nav height below */
+    --brand-ribbon-height: 44px;
+}
+
+/* Reserve space under the fixed navbar on every page that doesn't render
+   the brand-hero (which has its own internal padding).
+   `.brand-landing` is set by the welcome partial via inline JS, so the
+   exclusion works even on browsers without :has() support. */
+body:not(.brand-landing):not(:has(.brand-hero)) {
+    padding-top: var(--brand-nav-height);
+}
+
+/* Welcome page: kill any inherited top spacing from upstream/Bootstrap on
+   the wrappers between body and the hero, so the hero sits flush below
+   the fixed navbar. */
+body.brand-landing,
+body:has(.brand-hero) {
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+}
+
+body.brand-landing main,
+body.brand-landing .container,
+body.brand-landing #divIndex,
+body:has(.brand-hero) main,
+body:has(.brand-hero) .container,
+body:has(.brand-hero) #divIndex {
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+    /* Kill the 16+16px Bootstrap pb-3 stack that otherwise shows as
+       a strip of body-bg between the hero's brand background and
+       the footer. */
+    padding-bottom: 0 !important;
+    margin-bottom: 0 !important;
+}
+
+/* Apply brand font to brand components without fighting upstream's
+   `body !important` font rule. */
+.brand-hero,
+.brand-activation {
+    font-family: var(--brand-font);
+    color: var(--brand-ink);
+    line-height: 1.55;
+}
+
+/* ----------------- Full-bleed escape from .container ----------------- */
+.brand-hero {
+    position: relative;
+    left: 50%;
+    right: 50%;
+    width: 100vw;
+    margin-left: -50vw;
+    margin-right: -50vw;
+}
+
+/* ----------------- Hero (welcome / no-token state) ----------------- */
+.brand-hero {
+    background:
+        radial-gradient(1200px 600px at 85% -10%, rgba(124, 162, 43, .10), transparent 60%),
+        radial-gradient(900px 500px at 0% 0%, rgba(138, 41, 46, .06), transparent 55%),
+        var(--brand-bg);
+    border-bottom: 1px solid var(--brand-line);
+    /* Top padding equals the .navbar.fixed-top height with no extra
+       breathing room — the hero content provides its own spacing.
+       Body padding-top is intentionally NOT applied to welcome pages
+       (the rule above excludes them via :not(:has(.brand-hero))). */
+    padding: var(--brand-nav-height) 24px 56px;
+    overflow: hidden;
+}
+
+.brand-hero__inner {
+    max-width: 720px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+.brand-hero__logo {
+    max-width: 280px;
+    width: 100%;
+    height: auto;
+    margin: 0 auto 24px;
+    display: block;
+}
+
+.brand-hero__eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--brand-burgundy-500);
+    background: var(--brand-burgundy-100);
+    border: 1px solid rgba(138, 41, 46, .15);
+    padding: 6px 14px;
+    border-radius: 999px;
+    margin: 0 0 20px;
+}
+
+.brand-eyebrow-mark {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: var(--brand-green-500);
+    display: inline-block;
+}
+
+.brand-hero__headline {
+    font-family: var(--brand-font);
+    font-size: clamp(28px, 4.4vw, 42px);
+    line-height: 1.1;
+    letter-spacing: -.015em;
+    font-weight: 700;
+    color: var(--brand-ink);
+    margin: 0 auto 14px;
+}
+
+.brand-hero__sub {
+    font-size: clamp(15px, 1.5vw, 17px);
+    color: var(--brand-ink-soft);
+    margin: 0 auto 32px;
+}
+
+/* ============================================================
+   Authed/transactional UI — Azure-portal-density brand styling.
+   Scoped via `body:not(:has(.brand-hero))` so the welcome screen
+   keeps its own typography. Replaces the upstream blue accents
+   with brand burgundy/green and tightens type to a denser 14-px
+   base — the same feel Azure Portal uses for its admin surfaces.
+   ============================================================ */
+
+/* Container that wraps the activation form on _LandingPage.cshtml.
+   Just sets the max-width and a small top breathing room. The
+   navbar/ribbon clearance is handled by body padding-top. */
+.brand-activation {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 16px 16px 32px;
+}
+
+/* Section heading — used on Subscriptions list, activation panel, etc. */
+body:not(:has(.brand-hero)) .cm-section-heading {
+    font-family: var(--brand-font) !important;
+    font-size: 20px;
+    background: transparent;
+    border-bottom: none;
+    text-transform: none;
+    color: var(--brand-ink);
+    line-height: 1.3;
+    letter-spacing: -.005em;
+    margin-bottom: 14px;
+    font-weight: 700;
+    position: relative;
+    padding-bottom: 10px;
+    display: inline-block;
+}
+
+body:not(:has(.brand-hero)) .cm-section-heading::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 36px;
+    height: 3px;
+    background: var(--brand-green-500);
+    border-radius: 2px;
+}
+
+/* Card surface */
+body:not(:has(.brand-hero)) .cm-panel-default {
+    background: var(--brand-surface) !important;
+    border: 1px solid var(--brand-line);
+    border-radius: var(--brand-radius);
+    padding: 18px 20px 14px;
+    box-shadow: var(--brand-shadow-sm);
+    margin-top: 16px;
+}
+
+/* Definition-list pairs (activation form) */
+body:not(:has(.brand-hero)) dl.row dt {
+    font-weight: 600 !important;
+    color: var(--brand-mute);
+    font-size: 11.5px !important;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    padding-top: 10px !important;
+    padding-bottom: 2px !important;
+    font-family: var(--brand-font);
+}
+
+body:not(:has(.brand-hero)) dl.row dd {
+    color: var(--brand-ink);
+    font-size: 13.5px !important;
+    padding-top: 6px !important;
+    padding-bottom: 10px !important;
+    border-bottom: 1px solid var(--brand-line);
+    font-family: var(--brand-font);
+}
+
+body:not(:has(.brand-hero)) dl.row dt:last-of-type,
+body:not(:has(.brand-hero)) dl.row dd:last-of-type {
+    border-bottom: none;
+}
+
+body:not(:has(.brand-hero)) .red-star {
+    color: var(--brand-burgundy-500);
+    font-weight: 700;
+    margin-left: 4px;
+}
+
+/* Form controls */
+body:not(:has(.brand-hero)) input[type="text"],
+body:not(:has(.brand-hero)) input[type="date"],
+body:not(:has(.brand-hero)) input[type="number"],
+body:not(:has(.brand-hero)) input[type="email"],
+body:not(:has(.brand-hero)) select {
+    border: 1px solid var(--brand-line);
+    border-radius: var(--brand-radius-sm);
+    padding: 7px 10px;
+    font-family: var(--brand-font);
+    font-size: 13.5px;
+    color: var(--brand-ink);
+    background: #fff;
+    transition: border-color .12s ease, box-shadow .12s ease;
+    max-width: 320px;
+}
+
+body:not(:has(.brand-hero)) input:focus,
+body:not(:has(.brand-hero)) select:focus {
+    outline: none;
+    border-color: var(--brand-green-500);
+    box-shadow: 0 0 0 3px rgba(124, 162, 43, .18);
+}
+
+/* ---- Tables (Subscriptions list) ---- */
+body:not(:has(.brand-hero)) .cm-table {
+    font-size: 13px !important;
+    border: 1px solid var(--brand-line);
+    border-radius: var(--brand-radius);
+    overflow: hidden;
+    background: var(--brand-surface) !important;
+}
+
+body:not(:has(.brand-hero)) .cm-table th {
+    background: var(--brand-bg) !important;
+    color: var(--brand-mute) !important;
+    font-weight: 600;
+    font-size: 11.5px !important;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    padding: 10px 12px !important;
+    border-bottom: 1px solid var(--brand-line);
+    text-align: left;
+}
+
+body:not(:has(.brand-hero)) .cm-table td {
+    padding: 10px 12px !important;
+    border-bottom: 1px solid var(--brand-line);
+    color: var(--brand-ink);
+    vertical-align: middle;
+}
+
+body:not(:has(.brand-hero)) .cm-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+body:not(:has(.brand-hero)) .cm-table tbody tr:hover {
+    background: rgba(124, 162, 43, .04);
+}
+
+body:not(:has(.brand-hero)) .cm-table-head th {
+    background: var(--brand-bg) !important;
+    font-size: 11.5px !important;
+    color: var(--brand-mute) !important;
+}
+
+body:not(:has(.brand-hero)) .cm-link-button .fa,
+body:not(:has(.brand-hero)) .cm-ellipsis a {
+    color: var(--brand-ink-soft) !important;
+}
+
+body:not(:has(.brand-hero)) .cm-link-button:hover .fa {
+    color: var(--brand-burgundy-500) !important;
+}
+
+body:not(:has(.brand-hero)) .dropdown-menu {
+    border: 1px solid var(--brand-line);
+    border-radius: var(--brand-radius-sm);
+    box-shadow: var(--brand-shadow-lg);
+    padding: 4px;
+    font-family: var(--brand-font);
+    font-size: 13px;
+}
+
+body:not(:has(.brand-hero)) a.cm-dropdown-option {
+    border-radius: 4px;
+    padding: 7px 10px !important;
+    font-size: 13px;
+}
+
+body:not(:has(.brand-hero)) a.cm-dropdown-option:hover {
+    background: var(--brand-green-100) !important;
+    color: var(--brand-burgundy-500) !important;
+}
+
+/* ---- Buttons (re-skin upstream cm-button-* on authed pages) ---- */
+body:not(:has(.brand-hero)) .cm-button-default {
+    background-color: var(--brand-burgundy-500) !important;
+    border: 1px solid var(--brand-burgundy-500);
+    border-radius: var(--brand-radius-sm);
+    padding: 8px 16px !important;
+    font-size: 13.5px !important;
+    font-family: var(--brand-font);
+    color: #fff !important;
+    box-shadow: 0 3px 8px rgba(138, 41, 46, .18);
+    transition: background-color .12s ease, transform .1s ease, color .12s ease;
+    text-decoration: none !important;
+    margin-left: 6px;
+    margin-top: 12px;
+    margin-bottom: 12px;
+    font-weight: 600;
+}
+
+body:not(:has(.brand-hero)) .cm-button-default:hover {
+    background-color: var(--brand-burgundy-600) !important;
+    color: #fff !important;
+    font-size: 13.5px;
+    padding: 8px 16px;
+    transform: translateY(-1px);
+}
+
+body:not(:has(.brand-hero)) .cm-button-danger {
+    background-color: transparent !important;
+    border: 1px solid var(--brand-burgundy-500);
+    color: var(--brand-burgundy-500) !important;
+    border-radius: var(--brand-radius-sm);
+    padding: 8px 16px !important;
+    font-size: 13.5px !important;
+    font-family: var(--brand-font);
+    margin-left: 6px;
+    margin-top: 12px;
+    margin-bottom: 12px;
+    font-weight: 600;
+    transition: background-color .12s ease, color .12s ease;
+}
+
+body:not(:has(.brand-hero)) .cm-button-danger:hover {
+    background-color: var(--brand-burgundy-500) !important;
+    color: #fff !important;
+    font-size: 13.5px;
+    padding: 8px 16px;
+}
+
+body:not(:has(.brand-hero)) .cm-button-success {
+    background-color: var(--brand-green-600) !important;
+    border-color: var(--brand-green-600);
+    border-radius: var(--brand-radius-sm);
+    padding: 8px 16px !important;
+    font-size: 13.5px !important;
+    font-family: var(--brand-font);
+    margin-top: 12px;
+    margin-bottom: 12px;
+}
+
+body:not(:has(.brand-hero)) .cm-button-success:hover {
+    background-color: var(--brand-green-500) !important;
+    font-size: 13.5px;
+    padding: 8px 16px;
+    color: #fff;
+}
+
+/* Alerts */
+body:not(:has(.brand-hero)) .alert {
+    font-size: 13.5px;
+    border-radius: var(--brand-radius-sm);
+    font-family: var(--brand-font);
+}
+
+/* ----------------- Brand-aware overrides for shared chrome ----------------- */
+
+/* Top nav: pinned to exactly --brand-nav-height. Bootstrap's default
+   navbar padding (.5rem .5rem) can otherwise push the rendered height
+   past the value we set, which is what creates the "gap from logo to
+   ribbon" — body padding-top reserves 56px but the actual navbar takes
+   80+. min-height/max-height + zero padding keeps it honest. */
+.navbar.cm-top-nav-bar.brand-nav {
+    background-color: #ffffff !important;
+    border-bottom: 1px solid var(--brand-line);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, .02);
+    height: var(--brand-nav-height);
+    min-height: var(--brand-nav-height);
+    max-height: var(--brand-nav-height);
+    padding: 0 12px !important;
+}
+
+.navbar.cm-top-nav-bar.brand-nav .cm-username,
+.navbar.cm-top-nav-bar.brand-nav a {
+    color: var(--brand-ink) !important;
+    font-family: var(--brand-font);
+    font-size: 13.5px;
+}
+
+.navbar.cm-top-nav-bar.brand-nav .cm-logout,
+.navbar.cm-top-nav-bar.brand-nav .cm-username {
+    color: var(--brand-ink) !important;
+}
+
+.navbar.cm-top-nav-bar.brand-nav .cm-logo {
+    max-height: 36px;
+    margin-left: 0;
+    padding: 0 0 0 6px;
+}
+
+/* Footer rebrand */
+.cm-footer.brand-footer {
+    background-color: var(--brand-bg) !important;
+    border-top: 1px solid var(--brand-line);
+    color: var(--brand-mute) !important;
+    height: auto;
+    line-height: 1.5;
+    padding: 14px 16px;
+    position: static;
+    font-size: 12.5px !important;
+}
+
+.cm-footer.brand-footer a {
+    color: var(--brand-burgundy-500) !important;
+    text-decoration: none;
+}
+
+.cm-footer.brand-footer a:hover {
+    text-decoration: underline;
+}
+
+/* The brand sections opt out of the .container width via 100vw, so the
+   wrapping container's horizontal padding is left alone for the rest
+   of the app. */
+body:has(.brand-hero) main {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+/* ----------------- Secondary nav ribbon (Home / Subscriptions) -----------------
+   The upstream applies `margin-top: -168px` to .cm-menu-bar — a hack that
+   doesn't survive our pinned navbar. The body padding-top above already
+   clears the fixed navbar, so the ribbon just needs `margin-top: 0` to sit
+   immediately below it. The `.nav-scroller.cm-menu-bar` compound selector
+   outranks the upstream rule on specificity without a Razor edit. */
+.nav-scroller.cm-menu-bar {
+    margin-top: 0;
+    background-color: var(--brand-bg) !important;
+    border-bottom: 1px solid var(--brand-line);
+    box-shadow: none !important;
+    padding-top: 0;
+    padding-bottom: 0;
+    min-height: var(--brand-ribbon-height);
+}
+
+.nav-scroller.cm-menu-bar nav.nav {
+    gap: 2px;
+    padding-bottom: 0 !important;
+    padding-top: 0 !important;
+    align-items: stretch;
+    min-height: var(--brand-ribbon-height);
+}
+
+.nav-scroller.cm-menu-bar .nav-link {
+    color: var(--brand-ink-soft);
+    font-family: var(--brand-font);
+    font-weight: 600;
+    font-size: 13px;
+    padding: 0 14px;
+    display: inline-flex;
+    align-items: center;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    transition: color .12s ease, border-color .12s ease, background-color .12s ease;
+}
+
+.nav-scroller.cm-menu-bar .nav-link:hover {
+    color: var(--brand-burgundy-500);
+    border-bottom-color: var(--brand-green-500);
+    text-decoration: none;
+    background-color: rgba(255, 255, 255, .5);
+}
+
+.nav-scroller.cm-menu-bar .nav-link.active {
+    color: var(--brand-burgundy-500);
+    border-bottom-color: var(--brand-burgundy-500);
+    background-color: transparent;
+}
+
+/* Hide the ribbon entirely on the brand welcome screen — it's empty for
+   unauthenticated users and just clutters space next to the hero. */
+body.brand-landing .cm-menu-bar,
+body:has(.brand-hero) .cm-menu-bar {
+    display: none !important;
+}
+
+/* Cookie consent banner (_CookieConsentPartial.cshtml). Upstream renders
+   it as a Bootstrap blue alert sitting above <main> — that pushed the
+   brand-hero down and produced a "gap" before/after dismissal. Lift it
+   out of flow as a slim brand-styled toast pinned to the bottom. */
+#cookieConsent.alert {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 640px;
+    width: calc(100% - 32px);
+    z-index: 1040;
+    background: var(--brand-ink) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: var(--brand-radius);
+    box-shadow: var(--brand-shadow-lg);
+    padding: 12px 16px !important;
+    font-size: 13.5px;
+    font-family: var(--brand-font);
+    line-height: 1.45;
+    margin: 0 !important;
+}
+
+#cookieConsent.alert .accept-policy {
+    background: var(--brand-burgundy-500) !important;
+    color: #fff !important;
+    border: none !important;
+    padding: 6px 14px !important;
+    font-size: 13px !important;
+    border-radius: var(--brand-radius-sm);
+    margin-left: 12px;
+    font-family: var(--brand-font);
+    font-weight: 600 !important;
+    float: none !important;
+}
+
+#cookieConsent.alert .accept-policy:hover {
+    background: var(--brand-burgundy-600) !important;
+}
+
+/* Small screens */
+@media (max-width: 640px) {
+    .brand-hero { padding: var(--brand-nav-height) 18px 32px; }
+    .brand-activation { padding: 12px 14px 28px; }
+    body:not(:has(.brand-hero)) .cm-panel-default { padding: 14px; }
+    body:not(:has(.brand-hero)) .cm-table { font-size: 12.5px !important; }
 }

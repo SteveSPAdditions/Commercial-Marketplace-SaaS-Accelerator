@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/s6521/OneDrive - SP Additions/Company Documents - Documents/Development/SaaS Transactable offer/Brand Assets//**)",
+      "WebFetch(domain:readandunderstood.com)",
+      "Bash(cp \"/c/Users/s6521/OneDrive - SP Additions/Company Documents - Documents/Development/SaaS Transactable offer/Brand Assets/1. SP Additions Modern Full.png\" \"d:/VSTFSWork/saas-accelerator/Commercial-Marketplace-SaaS-Accelerator/src/CustomerSite/wwwroot/brand/sp-additions-logo.png\")",
+      "Bash(cp \"/c/Users/s6521/OneDrive - SP Additions/Company Documents - Documents/Development/SaaS Transactable offer/Brand Assets/3. favicon.ico\" \"d:/VSTFSWork/saas-accelerator/Commercial-Marketplace-SaaS-Accelerator/src/CustomerSite/wwwroot/brand/favicon.ico\")"
+    ]
+  },
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true
+  }
+}

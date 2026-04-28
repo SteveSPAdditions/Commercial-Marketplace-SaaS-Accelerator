@@ -1,25 +1,41 @@
-﻿<!DOCTYPE html>
+﻿@inject Microsoft.Extensions.Configuration.IConfiguration BrandConfig
+@{
+    var brandSection = BrandConfig.GetSection("Brand");
+    var brandLogo = brandSection["LogoPath"] ?? "~/contoso-sales.png";
+    var brandFavicon = brandSection["FaviconPath"] ?? "~/favicon.ico";
+    var brandProduct = brandSection["ProductName"] ?? "Landing Page";
+    var brandCompany = brandSection["CompanyName"] ?? "";
+    var brandAddress = brandSection["CompanyAddress"] ?? "";
+    var brandSupport = brandSection["SupportEmail"] ?? "";
+    var adobeKit = brandSection["AdobeFontsKitId"];
+}
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Landing Page</title>
+    <title>@brandProduct</title>
+    <link rel="icon" type="image/x-icon" href="@brandFavicon" />
     <link rel="stylesheet" href="~/css/customer-site.css" />
     <script src="~/lib/jquery/dist/jquery.js"></script>
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     @* <script defer src="~/js/script.js"></script> *@
     <link href="~/lib/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet" />
     <link href="~/css/font-awesome/css/font-awesome.css" rel="stylesheet" />
-    <link rel="stylesheet" href="~/css/customer-custom.css" />
     <link href="https://fonts.googleapis.com/css?family=Lato&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@@400;500;600;700&display=swap" rel="stylesheet">
+    @if (!string.IsNullOrWhiteSpace(adobeKit))
+    {
+        <link rel="stylesheet" href="https://use.typekit.net/@(adobeKit).css" />
+    }
+    <link rel="stylesheet" href="~/css/customer-custom.css" />
     <link href="~/lib/bootstrap/customer-offcanvas.css" rel="stylesheet" />
-    
+
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg fixed-top navbar-dark cm-top-nav-bar">
+    <nav class="navbar navbar-expand-lg fixed-top navbar-dark cm-top-nav-bar brand-nav">
         <a class="navbar-brand mr-auto mr-lg-0" href="@Url.Action("Index", "Home")">
-            <img class="cm-logo" style="padding-left:15px;" src="~/contoso-sales.png" />
-            @*<img class="cm-logo pull-left" src="https://kblnuser.azurewebsites.net/logo.png" />*@
+            <img class="cm-logo" style="padding-left:15px;" src="@brandLogo" alt="@brandCompany" />
         </a>
         @*<a class="navbar-brand mr-auto mr-lg-0" asp-area="" asp-controller="Home" asp-action="Index">SaasKit Demo</a>*@
 
@@ -62,9 +78,18 @@
         </main>
     </div>
 
-    <footer class="cm-footer">
+    <footer class="cm-footer brand-footer">
         <div class="container text-center">
-            &copy; 2020 - SaasKit - Demo - Version: @ViewData["AppVersion"]
+            &copy; @DateTime.UtcNow.Year @brandCompany
+            @if (!string.IsNullOrWhiteSpace(brandAddress))
+            {
+                <span> &middot; @brandAddress</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(brandSupport))
+            {
+                <span> &middot; <a href="mailto:@brandSupport">@brandSupport</a></span>
+            }
+            <span> &middot; v@(ViewData["AppVersion"])</span>
         </div>
     </footer>
 
@@ -76,7 +101,46 @@
     <script src="https://cdn.datatables.net/1.10.20/js/jquery.dataTables.min.js" asp-append-version="true"></script>
     @* <script src="https://cdn.datatables.net/1.10.20/js/dataTables.bootstrap4.min.js" asp-append-version="true"></script> *@
     <script src="~/lib/bootstrap/offcanvas.js"></script>
-    
+
+    @* Ribbon enhancement (fork-safe — no upstream Razor edit).
+       Upstream's empty `<a class="nav-link active">` wrapper is broken HTML, so
+       the active class never lands on a real link. This script:
+         1. Hides the "Home" link when there's no activation token in the URL —
+            without a token, /Home/Index just renders the welcome screen, which
+            is useless for an authed user. Once the token is lost, the only
+            meaningful nav is Subscriptions.
+         2. Preserves the current query string on the surviving links so the
+            activation token follows them when present.
+         3. Marks the link matching the current path as active for the brand
+            underline. *@
+    <script>
+        (function () {
+            var path = (location.pathname || '').toLowerCase().replace(/\/$/, '');
+            if (path === '') path = '/home/index';
+            var search = location.search || '';
+            var hasToken = search.length > 0;
+            var links = document.querySelectorAll('.nav-scroller.cm-menu-bar a.nav-link[href]');
+            links.forEach(function (a) {
+                var rawHref = a.getAttribute('href') || '';
+                if (!rawHref) return;
+                var hrefPath = rawHref.split('?')[0].toLowerCase().replace(/\/$/, '');
+                var isHomeLink = hrefPath === '/home/index' || hrefPath === '/' || hrefPath === '';
+                if (isHomeLink && !hasToken) {
+                    a.style.display = 'none';
+                    return;
+                }
+                if (hasToken && rawHref.indexOf('?') === -1) {
+                    a.setAttribute('href', rawHref + search);
+                }
+                var isActive = (hrefPath === path) || (path === '/home/index' && (hrefPath === '' || hrefPath === '/'));
+                if (isActive) {
+                    a.classList.add('active');
+                    a.setAttribute('aria-current', 'page');
+                }
+            });
+        })();
+    </script>
+
     @RenderSection("Scripts", required: false)
 </body>
 </html>
