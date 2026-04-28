@@ -360,3 +360,6 @@ src/Marketplace.SaaS.Accelerator.MeteredTriggerJob/appsettings.Development.json
 src/Marketplace.SaaS.Accelerator.CustomerSite/appsettings.Development.json
 src/AdminSite/appsettings.Development.json
 src/CustomerSite/appsettings.Development.json
+
+# Claude Code local-only settings (per-user permissions, not shared)
+.claude/settings.local.json
