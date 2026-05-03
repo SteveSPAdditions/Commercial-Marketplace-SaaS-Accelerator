@@ -55,7 +55,7 @@
                                                     <span>N/A</span>
                                                 }
                                             </td>
-                                            <td class="text-left">@subscription.SubscriptionStatus</td>
+                                            <td class="text-left"><span class="status-pill status-@subscription.SubscriptionStatus.ToString().ToLowerInvariant()">@subscription.SubscriptionStatus</span></td>
                                             <td class="text-left  cm-ellipsis">
                                                 <div class="nav-item dropdown">
                                                     <a class="nav-link dropdown cm-link-button" href="#" id="dropdown01" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><i class="fa fa-bars"></i></a>
@@ -65,10 +65,10 @@
                                                             <a class="dropdown-item cm-dropdown-option" asp-action="ViewSubscription" asp-route-subscriptionId="@Model.Subscriptions[i].Id" asp-route-planId="@Model.Subscriptions[i].PlanId" asp-route-operation="Deactivate">Unsubscribe</a>
                                                             @if (subscription.AcceptSubscriptionUpdates == true)
                                                             {
-                                                                <a class="dropdown-item cm-dropdown-option" onclick="ViewSubscriptionDetail('@Model.Subscriptions[i].Id')" data-bs-toggle="modal" data-bs-target="#myModal">Change Plan</a>
+                                                                <a class="dropdown-item cm-dropdown-option" onclick="ViewSubscriptionDetail('@Model.Subscriptions[i].Id')">Change Plan</a>
                                                                 @if (subscription.IsPerUserPlan)
                                                                 {
-                                                                    <a class="dropdown-item cm-dropdown-option" onclick="ViewSubscriptionQuantityDetail('@Model.Subscriptions[i].Id')" data-bs-toggle="modal"  data-bs-target="#myModal">Change Quantity</a>
+                                                                    <a class="dropdown-item cm-dropdown-option" onclick="ViewSubscriptionQuantityDetail('@Model.Subscriptions[i].Id')">Change Quantity</a>
                                                                 }                                                      
                                                                 <a class="dropdown-item cm-dropdown-option" target="_blank" href="@Model.SaaSAppUrl" title="Click here to go to SaaS App">SaasApp</a>
                                                             }
@@ -81,7 +81,7 @@
                                                         {
                                                             <a class="dropdown-item cm-dropdown-option" asp-action="ViewSubscription" asp-route-subscriptionId="@Model.Subscriptions[i].Id" asp-route-planId="@Model.Subscriptions[i].PlanId" asp-route-operation="Activate">Subscribe</a>
                                                         }
-                                                        <a class="dropdown-item cm-dropdown-option" data-bs-toggle="modal" data-bs-target="#myModal" onclick="ViewSubscriptionlogdetailsById('@Model.Subscriptions[i].Id')">Activity Log</a>
+                                                        <a class="dropdown-item cm-dropdown-option" onclick="ViewSubscriptionlogdetailsById('@Model.Subscriptions[i].Id')">Activity Log</a>
 
                                                         
                                                     </div>
@@ -161,7 +161,7 @@
             datatype: "json",
             success: function (data) {
                 $('#myModal').html(data);
-                $('#myModal').modal();
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('myModal')).show();
             },
             error: function () {
                 swal({
@@ -181,7 +181,7 @@
             datatype: "json",
             success: function (data) {
                 $('#myModal').html(data);
-                $('#myModal').modal();
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('myModal')).show();
 
             },
             error: function () {
@@ -204,7 +204,7 @@
                 $('#myModal').html(data);
                
                 
-                $('#myModal').modal();
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('myModal')).show();
                 // const myel = new bootstrap.Modal('#myModal');
                 // document.querySelector('.btn-close').addEventListener('click', () => {
                 //        myel.hide();

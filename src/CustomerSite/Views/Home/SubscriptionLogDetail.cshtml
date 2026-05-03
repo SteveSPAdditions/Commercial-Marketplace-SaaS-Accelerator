@@ -1,10 +1,10 @@
 ﻿@model List<Marketplace.SaaS.Accelerator.DataAccess.Entities.SubscriptionAuditLogs>
 
 
-<div class="modal-dialog modal-lg modal-dialog-scrollable">
+<div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
         <div class="modal-header header-bg">
-            <h4 class="modal-title"><span class="cm-section-heading"> Activity Log</span></h4>
+            <h5 class="modal-title">Activity Log</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
@@ -16,14 +16,14 @@
                     <dd class="col-4 text-start">@Model.FirstOrDefault()?.Subscription?.Name</dd>
                 </dl>
             </div>
-            <table class="table-bordered table-responsive cm-table">
+            <table class="table table-bordered cm-table">
                 <thead class="cm-table-head">
                     <tr>
-                        <th width="20%" class="text-start">Activity Log Time</th>
+                        <th width="16%" class="text-start">Activity Log Time</th>
                         <th width="20%" class="text-start">Subscription Name</th>
-                        <th width="10%" class="text-start">Attribute</th>
-                        <th width="10%" class="text-start">Old Value</th>
-                        <th width="10%" class="text-start">New Value</th>
+                        <th width="14%" class="text-start">Attribute</th>
+                        <th width="25%" class="text-start">Old Value</th>
+                        <th width="25%" class="text-start">New Value</th>
                     </tr>
                 </thead>
                 <tbody>

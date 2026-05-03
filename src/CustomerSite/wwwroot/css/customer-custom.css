@@ -391,6 +391,30 @@ a.cm-dropdown-option {
     --brand-font: "proxima-nova", "Proxima Nova", "Montserrat", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
     --brand-nav-height: 56px; /* keep aligned with .navbar.brand-nav height below */
     --brand-ribbon-height: 44px;
+
+    /* Fluent / Azure portal palette — used on transactional surfaces only.
+       The hero/welcome page keeps the brand-* tokens above. Switching to
+       Azure portal aesthetic: cool neutrals, Azure blue primary, square
+       corners, Segoe UI typography, no gradients. */
+    --azure-blue: #0078d4;
+    --azure-blue-hover: #106ebe;
+    --azure-blue-pressed: #005a9e;
+    --azure-bg: #faf9f8;
+    --azure-rail: #f3f2f1;
+    --azure-divider: #edebe9;
+    --azure-border: #d2d0ce;
+    --azure-ink: #323130;
+    --azure-ink-soft: #605e5c;
+    --azure-mute: #a19f9d;
+    --azure-success-bg: #dff6dd;
+    --azure-success-text: #107c10;
+    --azure-warning-bg: #fff4ce;
+    --azure-warning-text: #797673;
+    --azure-error-bg: #fde7e9;
+    --azure-error-text: #a4262c;
+    --azure-radius: 2px;
+    --azure-shadow: 0 1.6px 3.6px rgba(0, 0, 0, .1), 0 .3px .9px rgba(0, 0, 0, .07);
+    --azure-font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
 }
 
 /* Reserve space under the fixed navbar on every page that doesn't render
@@ -514,79 +538,71 @@ body:has(.brand-hero) #divIndex {
 }
 
 /* ============================================================
-   Authed/transactional UI — Azure-portal-density brand styling.
+   Authed/transactional UI — Azure Portal aesthetic.
    Scoped via `body:not(:has(.brand-hero))` so the welcome screen
-   keeps its own typography. Replaces the upstream blue accents
-   with brand burgundy/green and tightens type to a denser 14-px
-   base — the same feel Azure Portal uses for its admin surfaces.
+   keeps its own brand typography and gradient. Transactional
+   surfaces use Fluent neutrals + Azure blue, square 2px corners,
+   hairline borders, and Segoe UI at a dense 13-14px base.
    ============================================================ */
 
-/* Container that wraps the activation form on _LandingPage.cshtml.
-   Just sets the max-width and a small top breathing room. The
-   navbar/ribbon clearance is handled by body padding-top. */
+/* Container that wraps the activation form on _LandingPage.cshtml. */
 .brand-activation {
     max-width: 960px;
     margin: 0 auto;
     padding: 16px 16px 32px;
+    font-family: var(--azure-font);
+    color: var(--azure-ink);
 }
 
-/* Section heading — used on Subscriptions list, activation panel, etc. */
+/* Section heading — flat blade title, no decorative underline. */
 body:not(:has(.brand-hero)) .cm-section-heading {
-    font-family: var(--brand-font) !important;
-    font-size: 20px;
+    font-family: var(--azure-font) !important;
+    font-size: 18px;
     background: transparent;
     border-bottom: none;
     text-transform: none;
-    color: var(--brand-ink);
+    color: var(--azure-ink);
     line-height: 1.3;
-    letter-spacing: -.005em;
-    margin-bottom: 14px;
-    font-weight: 700;
-    position: relative;
-    padding-bottom: 10px;
+    letter-spacing: 0;
+    margin-bottom: 12px;
+    font-weight: 600;
     display: inline-block;
 }
 
-body:not(:has(.brand-hero)) .cm-section-heading::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    bottom: 0;
-    width: 36px;
-    height: 3px;
-    background: var(--brand-green-500);
-    border-radius: 2px;
-}
-
-/* Card surface */
+/* Card / blade surface — flat, hairline border, no shadow.
+   Azure Portal blades use no card radius and no drop shadow on
+   inline content; shadows are reserved for floating surfaces
+   (modals, flyouts, callouts). */
 body:not(:has(.brand-hero)) .cm-panel-default {
-    background: var(--brand-surface) !important;
-    border: 1px solid var(--brand-line);
-    border-radius: var(--brand-radius);
-    padding: 18px 20px 14px;
-    box-shadow: var(--brand-shadow-sm);
+    background: #ffffff !important;
+    border: 1px solid var(--azure-divider);
+    border-radius: var(--azure-radius);
+    padding: 16px 20px 12px;
+    box-shadow: none;
     margin-top: 16px;
 }
 
-/* Definition-list pairs (activation form) */
+/* Definition-list pairs (activation form) — sentence case, no
+   uppercase or letter-spacing. Azure form labels are 12px sentence-
+   case in the secondary text colour. */
 body:not(:has(.brand-hero)) dl.row dt {
     font-weight: 600 !important;
-    color: var(--brand-mute);
-    font-size: 11.5px !important;
-    letter-spacing: .04em;
-    text-transform: uppercase;
+    color: var(--azure-ink-soft);
+    font-size: 12px !important;
+    letter-spacing: 0;
+    text-transform: none;
     padding-top: 10px !important;
     padding-bottom: 2px !important;
-    font-family: var(--brand-font);
+    font-family: var(--azure-font);
 }
 
 body:not(:has(.brand-hero)) dl.row dd {
-    color: var(--brand-ink);
-    font-size: 13.5px !important;
+    color: var(--azure-ink);
+    font-size: 13px !important;
     padding-top: 6px !important;
     padding-bottom: 10px !important;
-    border-bottom: 1px solid var(--brand-line);
-    font-family: var(--brand-font);
+    border-bottom: 1px solid var(--azure-divider);
+    font-family: var(--azure-font);
 }
 
 body:not(:has(.brand-hero)) dl.row dt:last-of-type,
@@ -595,177 +611,214 @@ body:not(:has(.brand-hero)) dl.row dd:last-of-type {
 }
 
 body:not(:has(.brand-hero)) .red-star {
-    color: var(--brand-burgundy-500);
-    font-weight: 700;
+    color: var(--azure-error-text);
+    font-weight: 600;
     margin-left: 4px;
 }
 
-/* Form controls */
+/* Form controls — Fluent text fields. */
 body:not(:has(.brand-hero)) input[type="text"],
 body:not(:has(.brand-hero)) input[type="date"],
 body:not(:has(.brand-hero)) input[type="number"],
 body:not(:has(.brand-hero)) input[type="email"],
 body:not(:has(.brand-hero)) select {
-    border: 1px solid var(--brand-line);
-    border-radius: var(--brand-radius-sm);
-    padding: 7px 10px;
-    font-family: var(--brand-font);
-    font-size: 13.5px;
-    color: var(--brand-ink);
+    border: 1px solid var(--azure-border);
+    border-radius: var(--azure-radius);
+    padding: 6px 8px;
+    font-family: var(--azure-font);
+    font-size: 13px;
+    color: var(--azure-ink);
     background: #fff;
-    transition: border-color .12s ease, box-shadow .12s ease;
+    transition: border-color .1s ease, box-shadow .1s ease;
     max-width: 320px;
 }
 
 body:not(:has(.brand-hero)) input:focus,
 body:not(:has(.brand-hero)) select:focus {
     outline: none;
-    border-color: var(--brand-green-500);
-    box-shadow: 0 0 0 3px rgba(124, 162, 43, .18);
+    border-color: var(--azure-blue);
+    box-shadow: 0 0 0 1px var(--azure-blue);
 }
 
-/* ---- Tables (Subscriptions list) ---- */
+/* ---- Tables (Subscriptions list) ----
+   Azure Portal lists: square, no card wrapping, hairline row
+   dividers, neutral gray hover, sentence-case headers. */
 body:not(:has(.brand-hero)) .cm-table {
     font-size: 13px !important;
-    border: 1px solid var(--brand-line);
-    border-radius: var(--brand-radius);
-    overflow: hidden;
-    background: var(--brand-surface) !important;
+    border: none;
+    border-top: 1px solid var(--azure-divider);
+    border-radius: 0;
+    overflow: visible;
+    background: #ffffff !important;
+    font-family: var(--azure-font);
 }
 
 body:not(:has(.brand-hero)) .cm-table th {
-    background: var(--brand-bg) !important;
-    color: var(--brand-mute) !important;
+    background: #ffffff !important;
+    color: var(--azure-ink-soft) !important;
     font-weight: 600;
-    font-size: 11.5px !important;
-    text-transform: uppercase;
-    letter-spacing: .04em;
+    font-size: 12px !important;
+    text-transform: none;
+    letter-spacing: 0;
     padding: 10px 12px !important;
-    border-bottom: 1px solid var(--brand-line);
+    border-bottom: 1px solid var(--azure-divider);
     text-align: left;
 }
 
 body:not(:has(.brand-hero)) .cm-table td {
-    padding: 10px 12px !important;
-    border-bottom: 1px solid var(--brand-line);
-    color: var(--brand-ink);
+    padding: 4px 12px !important;
+    border-bottom: 1px solid var(--azure-divider);
+    color: var(--azure-ink);
     vertical-align: middle;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+/* The action cell holds a Bootstrap .nav-link wrapping the kebab icon.
+   .nav-link's default 8px top/bottom padding inflates the row floor by
+   ~16px on every row. Strip the padding inside table cells so the row
+   height is governed by the td, not the dropdown trigger. */
+body:not(:has(.brand-hero)) .cm-table .nav-link.cm-link-button {
+    padding: 2px 6px !important;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
 }
 
 body:not(:has(.brand-hero)) .cm-table tbody tr:last-child td {
-    border-bottom: none;
+    border-bottom: 1px solid var(--azure-divider);
 }
 
 body:not(:has(.brand-hero)) .cm-table tbody tr:hover {
-    background: rgba(124, 162, 43, .04);
+    background: var(--azure-rail);
 }
 
 body:not(:has(.brand-hero)) .cm-table-head th {
-    background: var(--brand-bg) !important;
-    font-size: 11.5px !important;
-    color: var(--brand-mute) !important;
+    background: #ffffff !important;
+    font-size: 12px !important;
+    color: var(--azure-ink-soft) !important;
+    text-transform: none;
+    letter-spacing: 0;
 }
 
 body:not(:has(.brand-hero)) .cm-link-button .fa,
 body:not(:has(.brand-hero)) .cm-ellipsis a {
-    color: var(--brand-ink-soft) !important;
+    color: var(--azure-ink-soft) !important;
 }
 
 body:not(:has(.brand-hero)) .cm-link-button:hover .fa {
-    color: var(--brand-burgundy-500) !important;
+    color: var(--azure-blue) !important;
 }
 
 body:not(:has(.brand-hero)) .dropdown-menu {
-    border: 1px solid var(--brand-line);
-    border-radius: var(--brand-radius-sm);
-    box-shadow: var(--brand-shadow-lg);
+    border: 1px solid var(--azure-divider);
+    border-radius: var(--azure-radius);
+    box-shadow: var(--azure-shadow);
     padding: 4px;
-    font-family: var(--brand-font);
+    font-family: var(--azure-font);
     font-size: 13px;
 }
 
 body:not(:has(.brand-hero)) a.cm-dropdown-option {
-    border-radius: 4px;
+    border-radius: var(--azure-radius);
     padding: 7px 10px !important;
     font-size: 13px;
+    color: var(--azure-ink) !important;
 }
 
 body:not(:has(.brand-hero)) a.cm-dropdown-option:hover {
-    background: var(--brand-green-100) !important;
-    color: var(--brand-burgundy-500) !important;
+    background: var(--azure-rail) !important;
+    color: var(--azure-blue) !important;
 }
 
-/* ---- Buttons (re-skin upstream cm-button-* on authed pages) ---- */
+/* ---- Buttons (re-skin upstream cm-button-* on authed pages) ----
+   Fluent buttons: solid primary in Azure blue, secondary as
+   white-with-border, destructive as outlined red. No shadow,
+   no hover-resize, no font-size change on hover. */
 body:not(:has(.brand-hero)) .cm-button-default {
-    background-color: var(--brand-burgundy-500) !important;
-    border: 1px solid var(--brand-burgundy-500);
-    border-radius: var(--brand-radius-sm);
-    padding: 8px 16px !important;
-    font-size: 13.5px !important;
-    font-family: var(--brand-font);
+    background-color: var(--azure-blue) !important;
+    border: 1px solid var(--azure-blue);
+    border-radius: var(--azure-radius);
+    padding: 6px 16px !important;
+    font-size: 13px !important;
+    font-family: var(--azure-font);
     color: #fff !important;
-    box-shadow: 0 3px 8px rgba(138, 41, 46, .18);
-    transition: background-color .12s ease, transform .1s ease, color .12s ease;
+    box-shadow: none;
+    transition: background-color .1s ease, border-color .1s ease;
     text-decoration: none !important;
     margin-left: 6px;
     margin-top: 12px;
     margin-bottom: 12px;
     font-weight: 600;
+    min-height: 32px;
 }
 
 body:not(:has(.brand-hero)) .cm-button-default:hover {
-    background-color: var(--brand-burgundy-600) !important;
+    background-color: var(--azure-blue-hover) !important;
+    border-color: var(--azure-blue-hover);
     color: #fff !important;
-    font-size: 13.5px;
-    padding: 8px 16px;
-    transform: translateY(-1px);
+    font-size: 13px;
+    padding: 6px 16px;
+    transform: none;
+}
+
+body:not(:has(.brand-hero)) .cm-button-default:active {
+    background-color: var(--azure-blue-pressed) !important;
+    border-color: var(--azure-blue-pressed);
 }
 
 body:not(:has(.brand-hero)) .cm-button-danger {
-    background-color: transparent !important;
-    border: 1px solid var(--brand-burgundy-500);
-    color: var(--brand-burgundy-500) !important;
-    border-radius: var(--brand-radius-sm);
-    padding: 8px 16px !important;
-    font-size: 13.5px !important;
-    font-family: var(--brand-font);
+    background-color: #ffffff !important;
+    border: 1px solid var(--azure-error-text);
+    color: var(--azure-error-text) !important;
+    border-radius: var(--azure-radius);
+    padding: 6px 16px !important;
+    font-size: 13px !important;
+    font-family: var(--azure-font);
     margin-left: 6px;
     margin-top: 12px;
     margin-bottom: 12px;
     font-weight: 600;
-    transition: background-color .12s ease, color .12s ease;
+    min-height: 32px;
+    box-shadow: none;
+    transition: background-color .1s ease, color .1s ease;
 }
 
 body:not(:has(.brand-hero)) .cm-button-danger:hover {
-    background-color: var(--brand-burgundy-500) !important;
-    color: #fff !important;
-    font-size: 13.5px;
-    padding: 8px 16px;
+    background-color: var(--azure-error-bg) !important;
+    color: var(--azure-error-text) !important;
+    font-size: 13px;
+    padding: 6px 16px;
 }
 
 body:not(:has(.brand-hero)) .cm-button-success {
-    background-color: var(--brand-green-600) !important;
-    border-color: var(--brand-green-600);
-    border-radius: var(--brand-radius-sm);
-    padding: 8px 16px !important;
-    font-size: 13.5px !important;
-    font-family: var(--brand-font);
+    background-color: var(--azure-success-text) !important;
+    border: 1px solid var(--azure-success-text);
+    border-radius: var(--azure-radius);
+    padding: 6px 16px !important;
+    font-size: 13px !important;
+    font-family: var(--azure-font);
     margin-top: 12px;
     margin-bottom: 12px;
+    color: #fff !important;
+    font-weight: 600;
+    min-height: 32px;
+    box-shadow: none;
 }
 
 body:not(:has(.brand-hero)) .cm-button-success:hover {
-    background-color: var(--brand-green-500) !important;
-    font-size: 13.5px;
-    padding: 8px 16px;
-    color: #fff;
+    background-color: #0e6e0e !important;
+    border-color: #0e6e0e;
+    font-size: 13px;
+    padding: 6px 16px;
+    color: #fff !important;
 }
 
-/* Alerts */
+/* Alerts — Fluent message-bar geometry. */
 body:not(:has(.brand-hero)) .alert {
-    font-size: 13.5px;
-    border-radius: var(--brand-radius-sm);
-    font-family: var(--brand-font);
+    font-size: 13px;
+    border-radius: var(--azure-radius);
+    font-family: var(--azure-font);
 }
 
 /* ----------------- Brand-aware overrides for shared chrome ----------------- */
@@ -824,6 +877,13 @@ body:not(:has(.brand-hero)) .alert {
     text-decoration: underline;
 }
 
+/* On transactional pages, swap the footer link to Azure blue so the
+   colour aligns with the rest of the page chrome. The welcome hero
+   keeps the burgundy link via the unscoped rule above. */
+body:not(:has(.brand-hero)) .cm-footer.brand-footer a {
+    color: var(--azure-blue) !important;
+}
+
 /* The brand sections opt out of the .container width via 100vw, so the
    wrapping container's horizontal padding is left alone for the rest
    of the app. */
@@ -840,8 +900,8 @@ body:has(.brand-hero) main {
    outranks the upstream rule on specificity without a Razor edit. */
 .nav-scroller.cm-menu-bar {
     margin-top: 0;
-    background-color: var(--brand-bg) !important;
-    border-bottom: 1px solid var(--brand-line);
+    background-color: #ffffff !important;
+    border-bottom: 1px solid var(--azure-divider);
     box-shadow: none !important;
     padding-top: 0;
     padding-bottom: 0;
@@ -857,8 +917,8 @@ body:has(.brand-hero) main {
 }
 
 .nav-scroller.cm-menu-bar .nav-link {
-    color: var(--brand-ink-soft);
-    font-family: var(--brand-font);
+    color: var(--azure-ink-soft);
+    font-family: var(--azure-font);
     font-weight: 600;
     font-size: 13px;
     padding: 0 14px;
@@ -866,19 +926,19 @@ body:has(.brand-hero) main {
     align-items: center;
     border-bottom: 2px solid transparent;
     border-radius: 0;
-    transition: color .12s ease, border-color .12s ease, background-color .12s ease;
+    transition: color .1s ease, border-color .1s ease, background-color .1s ease;
 }
 
 .nav-scroller.cm-menu-bar .nav-link:hover {
-    color: var(--brand-burgundy-500);
-    border-bottom-color: var(--brand-green-500);
+    color: var(--azure-blue);
+    border-bottom-color: transparent;
     text-decoration: none;
-    background-color: rgba(255, 255, 255, .5);
+    background-color: var(--azure-rail);
 }
 
 .nav-scroller.cm-menu-bar .nav-link.active {
-    color: var(--brand-burgundy-500);
-    border-bottom-color: var(--brand-burgundy-500);
+    color: var(--azure-blue);
+    border-bottom-color: var(--azure-blue);
     background-color: transparent;
 }
 
@@ -928,6 +988,74 @@ body:has(.brand-hero) .cm-menu-bar {
 
 #cookieConsent.alert .accept-policy:hover {
     background: var(--brand-burgundy-600) !important;
+}
+
+/* Azure-blue accept button on transactional pages. Welcome hero keeps
+   the burgundy variant via the unscoped rule above. */
+body:not(:has(.brand-hero)) #cookieConsent.alert .accept-policy {
+    background: var(--azure-blue) !important;
+    border-radius: var(--azure-radius);
+    font-family: var(--azure-font);
+}
+
+body:not(:has(.brand-hero)) #cookieConsent.alert .accept-policy:hover {
+    background: var(--azure-blue-hover) !important;
+}
+
+/* Modal sizing — Bootstrap's `modal-xl` only widens to 1140px at
+   viewport ≥1200px. On laptops between 992-1199px it silently falls
+   back to 800px, identical to modal-lg. Override so xl modals use
+   the available viewport at any size. */
+.modal-dialog.modal-xl {
+    max-width: min(96vw, 1240px);
+}
+
+/* ---- Status pills (Subscriptions list) ----
+   Fluent badge: small caps-height capsule with tinted background and
+   coloured text. Class is `status-pill status-<enum>` where <enum> is
+   the lowercased SubscriptionStatusEnumExtension name. Default
+   (neutral) covers UnRecognized / Unsubscribed / anything unknown. */
+body:not(:has(.brand-hero)) .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    border-radius: 2px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: var(--azure-font);
+    line-height: 18px;
+    background: var(--azure-rail);
+    color: var(--azure-ink-soft);
+    white-space: nowrap;
+}
+
+body:not(:has(.brand-hero)) .status-pill::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    flex: 0 0 6px;
+}
+
+body:not(:has(.brand-hero)) .status-pill.status-subscribed {
+    background: var(--azure-success-bg);
+    color: var(--azure-success-text);
+}
+
+body:not(:has(.brand-hero)) .status-pill.status-pendingfulfillmentstart,
+body:not(:has(.brand-hero)) .status-pill.status-pendingactivation,
+body:not(:has(.brand-hero)) .status-pill.status-pendingunsubscribe {
+    background: var(--azure-warning-bg);
+    color: #8a6914;
+}
+
+body:not(:has(.brand-hero)) .status-pill.status-activationfailed,
+body:not(:has(.brand-hero)) .status-pill.status-unsubscribefailed,
+body:not(:has(.brand-hero)) .status-pill.status-suspend {
+    background: var(--azure-error-bg);
+    color: var(--azure-error-text);
 }
 
 /* Small screens */
