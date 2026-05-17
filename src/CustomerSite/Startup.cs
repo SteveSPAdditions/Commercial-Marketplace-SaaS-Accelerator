@@ -3,6 +3,7 @@
 
 using Azure.Identity;
 using Marketplace.SaaS.Accelerator.CustomerSite.Controllers;
+using Marketplace.SaaS.Accelerator.CustomerSite.HostedServices;
 using Marketplace.SaaS.Accelerator.CustomerSite.WebHook;
 using Marketplace.SaaS.Accelerator.DataAccess.Context;
 using Marketplace.SaaS.Accelerator.DataAccess.Contracts;
@@ -24,6 +25,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Identity.Web;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.Marketplace.SaaS;
 using System;
@@ -40,16 +42,17 @@ public class Startup
     /// <summary>
     /// Initializes a new instance of the <see cref="Startup"/> class.
     /// </summary>
-    /// <param name="configuration">The configuration<see cref="IConfiguration"/>.</param>
-    public Startup(IConfiguration configuration)
+    public Startup(IConfiguration configuration, IHostEnvironment hostEnvironment)
     {
         this.Configuration = configuration;
+        this.HostEnvironment = hostEnvironment;
     }
 
-    /// <summary>
-    /// Gets the Configuration.
-    /// </summary>
+    /// <summary>Gets the Configuration.</summary>
     public IConfiguration Configuration { get; }
+
+    /// <summary>Gets the IHostEnvironment, used to resolve content-root-relative paths (e.g. for the SPP signing cert).</summary>
+    public IHostEnvironment HostEnvironment { get; }
 
     /// <summary>
     /// The ConfigureServices.
@@ -57,6 +60,17 @@ public class Startup
     /// <param name="services">The services<see cref="IServiceCollection"/>.</param>
     public void ConfigureServices(IServiceCollection services)
     {
+        // Application Insights. Only register when the connection string is genuinely
+        // valid -- AddApplicationInsightsTelemetry() throws ArgumentException at startup
+        // if APPLICATIONINSIGHTS_CONNECTION_STRING is present but blank or malformed,
+        // which would 500.30 the whole app. Absent setting is fine; empty is fatal.
+        var aiConnStr = this.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"];
+        if (!string.IsNullOrWhiteSpace(aiConnStr)
+            && aiConnStr.IndexOf("InstrumentationKey", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            services.AddApplicationInsightsTelemetry();
+        }
+
         services.Configure<CookiePolicyOptions>(options =>
         {
             // This lambda determines whether user consent for non-essential cookies is needed for a given request.
@@ -77,33 +91,89 @@ public class Startup
             SaaSAppUrl = this.Configuration["SaaSApiConfiguration:SaaSAppUrl"],
             SignedOutRedirectUri = this.Configuration["SaaSApiConfiguration:SignedOutRedirectUri"],
             TenantId = this.Configuration["SaaSApiConfiguration:TenantId"],
-            Environment = this.Configuration["SaaSApiConfiguration:Environment"]
+            Environment = this.Configuration["SaaSApiConfiguration:Environment"],
+            AzRegionSvcUrl = this.Configuration["SaaSApiConfiguration:AzRegionSvcUrl"],
+            AzRegionSvcUrlTemplate = this.Configuration["SaaSApiConfiguration:AzRegionSvcUrlTemplate"],
+            AzRegionSvcRegions = this.Configuration["SaaSApiConfiguration:AzRegionSvcRegions"],
+            LegerisSignalingEndpointUrl = this.Configuration["SaaSApiConfiguration:LegerisSignalingEndpointUrl"],
+            LegerisSignalingHmacSecret = this.Configuration["SaaSApiConfiguration:LegerisSignalingHmacSecret"],
+            AzureRegionSelectorsFallback = this.Configuration["SaaSApiConfiguration:AzureRegionSelectorsFallback"],
+            RuntimeAppClientId = this.Configuration["SaaSApiConfiguration:RuntimeAppClientId"],
+            MTCertPath = this.Configuration["SaaSApiConfiguration:MTCertPath"],
+            MTCertPassword = this.Configuration["SaaSApiConfiguration:MTCertPassword"],
+            OutboxMaxAttempts = int.TryParse(this.Configuration["SaaSApiConfiguration:OutboxMaxAttempts"], out var oma) ? oma : 12,
+            OutboxDrainIntervalSeconds = int.TryParse(this.Configuration["SaaSApiConfiguration:OutboxDrainIntervalSeconds"], out var odi) ? odi : 30,
+            RedirectActivateToSetup = bool.TryParse(this.Configuration["SaaSApiConfiguration:RedirectActivateToSetup"], out var ras) && ras,
         };
         var creds = new ClientSecretCredential(config.TenantId.ToString(), config.ClientId.ToString(), config.ClientSecret);
 
+        // Scopes the SPP requests at sign-in. Includes Sites.FullControl.All so the portal
+        // can grant per-site Sites.Selected permissions to the runtime app at Step 4 of
+        // Setup on behalf of the customer admin who's signed in. Admin consent for these
+        // scopes is required (the customer admin clicks Grant consent at Step 3).
+        var graphScopes = new[]
+        {
+            "User.Read",
+            "https://graph.microsoft.com/Sites.FullControl.All",
+        };
+
+        // Resolve the SPP signing certificate path. Allows the App Setting to be either
+        // absolute (e.g. D:\home\site\wwwroot\cert\portal.pfx on App Service) or relative
+        // to ContentRoot (e.g. cert/portal.pfx).
+        string resolvedMtCertPath = null;
+        if (!string.IsNullOrWhiteSpace(config.MTCertPath))
+        {
+            resolvedMtCertPath = System.IO.Path.IsPathRooted(config.MTCertPath)
+                ? config.MTCertPath
+                : System.IO.Path.Combine(this.HostEnvironment.ContentRootPath, config.MTCertPath);
+        }
+
         services
-            .AddAuthentication(options =>
+            .AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
+            .AddMicrosoftIdentityWebApp(opts =>
             {
-                options.DefaultAuthenticateScheme = OpenIdConnectDefaults.AuthenticationScheme;
-                options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+                opts.Instance = string.IsNullOrEmpty(config.AdAuthenticationEndPoint)
+                    ? "https://login.microsoftonline.com/"
+                    : config.AdAuthenticationEndPoint.TrimEnd('/') + "/";
+                opts.TenantId = "common"; // multi-tenant: customers from any work/school tenant
+                opts.ClientId = config.MTClientId;
+                // Use the Microsoft.Identity.Web default (/signin-oidc) rather than colliding
+                // with the HomeController's /Home/Index route. The previous raw OIDC handler
+                // got away with /Home/Index because the response was a query-string GET; the
+                // new flow uses form_post which would otherwise hit MVC and trip antiforgery.
+
+                if (!string.IsNullOrWhiteSpace(resolvedMtCertPath))
+                {
+                    opts.ClientCertificates = new[]
+                    {
+                        new Microsoft.Identity.Web.CertificateDescription
+                        {
+                            SourceType = Microsoft.Identity.Web.CertificateSource.Path,
+                            CertificateDiskPath = resolvedMtCertPath,
+                            CertificatePassword = config.MTCertPassword ?? string.Empty,
+                        },
+                    };
+                }
             })
-            .AddCookie(options =>
-            {
-                options.ExpireTimeSpan = TimeSpan.FromMinutes(60);
-                options.Cookie.MaxAge = options.ExpireTimeSpan;
-                options.SlidingExpiration = true;
-            })
-            .AddOpenIdConnect(options =>
-            {
-                options.Authority = $"{config.AdAuthenticationEndPoint}/common/v2.0";
-                options.ClientId = config.MTClientId;
-                options.ResponseType = OpenIdConnectResponseType.IdToken;
-                options.CallbackPath = "/Home/Index";
-                options.SignedOutRedirectUri = config.SignedOutRedirectUri;
-                options.TokenValidationParameters.NameClaimType = ClaimConstants.CLAIM_SHORT_NAME;
-                options.TokenValidationParameters.ValidateIssuer = false;
-            });
+            .EnableTokenAcquisitionToCallDownstreamApi(graphScopes)
+            .AddInMemoryTokenCaches();
+
+        // Configure the underlying OIDC options that Microsoft.Identity.Web wired up.
+        services.Configure<OpenIdConnectOptions>(OpenIdConnectDefaults.AuthenticationScheme, opts =>
+        {
+            opts.SignedOutRedirectUri = config.SignedOutRedirectUri;
+            opts.TokenValidationParameters.NameClaimType = Marketplace.SaaS.Accelerator.Services.Utilities.ClaimConstants.CLAIM_SHORT_NAME;
+            // SaaS Accelerator signs in users from arbitrary customer tenants -> skip the
+            // issuer validation that single-tenant apps rely on.
+            opts.TokenValidationParameters.ValidateIssuer = false;
+        });
+
+        services.Configure<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme, opts =>
+        {
+            opts.ExpireTimeSpan = TimeSpan.FromMinutes(60);
+            opts.Cookie.MaxAge = opts.ExpireTimeSpan;
+            opts.SlidingExpiration = true;
+        });
         services
             .AddTransient<IClaimsTransformation, CustomClaimsTransformation>()
             .AddScoped<ExceptionHandlerAttribute>()
@@ -115,7 +185,11 @@ public class Startup
         }
 
         services
-            .AddSingleton<IFulfillmentApiService>(new FulfillmentApiService(new MarketplaceSaaSClient(fulfillmentBaseApi, creds), config, new FulfillmentApiClientLogger()))
+            .AddSingleton<FulfillmentApiClientLogger>()
+            .AddSingleton<IFulfillmentApiService>(sp => new FulfillmentApiService(
+                new MarketplaceSaaSClient(fulfillmentBaseApi, creds),
+                config,
+                sp.GetRequiredService<FulfillmentApiClientLogger>()))
             .AddSingleton<SaaSApiClientConfiguration>(config)
             .AddSingleton<ValidateJwtToken>();
 
@@ -181,5 +255,29 @@ public class Startup
         services.AddScoped<IEmailService, SMTPEmailService>();
         services.AddScoped<SaaSClientLogger<HomeController>>();
         services.AddScoped<IWebNotificationService, WebNotificationService>();
+        services.AddScoped<ISubscriptionTenantConsentRepository, SubscriptionTenantConsentRepository>();
+        services.AddScoped<ISubscriptionSiteRepository, SubscriptionSiteRepository>();
+        services.AddScoped<INotificationOutboxRepository, NotificationOutboxRepository>();
+        services.AddScoped<SaaSClientLogger<SetupController>>();
+
+        services.AddHttpClient<IAzureRegionService, AzureRegionService>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(15);
+        });
+
+        services.AddScoped<ITenantAdminConsentService, TenantAdminConsentService>();
+        services.AddScoped<ISetupStatusService, SetupStatusService>();
+
+        services.AddHttpClient<IOutboxDispatcher, LegerisSignalingDispatcher>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
+
+        services.AddHttpClient<ISitePermissionService, SitePermissionService>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
+
+        services.AddHostedService<OutboxDrainService>();
     }
 }

@@ -3,6 +3,7 @@
 @{
     ViewData["Title"] = "Subscriptions";
 }
+<link rel="stylesheet" href="~/css/setup.css" asp-append-version="true" />
 
 <div class="text-center">
     <div class="container">
@@ -30,6 +31,7 @@
                                         <th>Plan</th>
                                         <th>Quantity</th>
                                         <th>Status</th>
+                                        <th>Setup</th>
                                         <th>Action</th>
                                     </tr>
                                 </thead>
@@ -56,10 +58,35 @@
                                                 }
                                             </td>
                                             <td class="text-left"><span class="status-pill status-@subscription.SubscriptionStatus.ToString().ToLowerInvariant()">@subscription.SubscriptionStatus</span></td>
+                                            <td class="text-left">
+                                                @{
+                                                    SetupStatusSummary setupStatus = null;
+                                                    if (subscription.SubscriptionStatus == SubscriptionStatusEnumExtension.Subscribed)
+                                                    {
+                                                        Model.SetupStatuses?.TryGetValue(subscription.Id, out setupStatus);
+                                                    }
+                                                }
+                                                @if (setupStatus == null)
+                                                {
+                                                    <span class="setup-pill-na">&mdash;</span>
+                                                }
+                                                else if (setupStatus.IsComplete)
+                                                {
+                                                    <a href="@setupStatus.SetupUrl" class="setup-pill setup-pill-complete" title="Setup complete">Setup: complete</a>
+                                                }
+                                                else
+                                                {
+                                                    <a href="@setupStatus.SetupUrl" class="setup-pill setup-pill-pending" title="Continue setup">Setup: @setupStatus.CompletedSteps of @setupStatus.TotalSteps</a>
+                                                }
+                                            </td>
                                             <td class="text-left  cm-ellipsis">
                                                 <div class="nav-item dropdown">
                                                     <a class="nav-link dropdown cm-link-button" href="#" id="dropdown01" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><i class="fa fa-bars"></i></a>
                                                     <div class="dropdown-menu">
+                                                        @if (setupStatus != null && !setupStatus.IsComplete)
+                                                        {
+                                                            <a class="dropdown-item cm-dropdown-option" href="@setupStatus.SetupUrl"><strong>Continue setup</strong></a>
+                                                        }
                                                         @if (subscription.SubscriptionStatus == SubscriptionStatusEnumExtension.Subscribed)
                                                         {
                                                             <a class="dropdown-item cm-dropdown-option" asp-action="ViewSubscription" asp-route-subscriptionId="@Model.Subscriptions[i].Id" asp-route-planId="@Model.Subscriptions[i].PlanId" asp-route-operation="Deactivate">Unsubscribe</a>
@@ -80,6 +107,10 @@
                                                         @if (subscription.SubscriptionStatus == SubscriptionStatusEnumExtension.PendingFulfillmentStart && subscription.IsAutomaticProvisioningSupported == false)
                                                         {
                                                             <a class="dropdown-item cm-dropdown-option" asp-action="ViewSubscription" asp-route-subscriptionId="@Model.Subscriptions[i].Id" asp-route-planId="@Model.Subscriptions[i].PlanId" asp-route-operation="Activate">Subscribe</a>
+                                                        }
+                                                        @if (setupStatus != null && setupStatus.IsComplete)
+                                                        {
+                                                            <a class="dropdown-item cm-dropdown-option" href="@setupStatus.SetupUrl">Setup (review)</a>
                                                         }
                                                         <a class="dropdown-item cm-dropdown-option" onclick="ViewSubscriptionlogdetailsById('@Model.Subscriptions[i].Id')">Activity Log</a>
 

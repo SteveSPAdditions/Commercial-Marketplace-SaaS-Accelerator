@@ -343,7 +343,7 @@ EXEC(N'
 
         public static void BaselineV2_SeedData(this MigrationBuilder migrationBuilder)
         {
-            var seedDate = DateTime.Now;
+            var seedDate = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
             migrationBuilder.Sql(@$"
 INSERT INTO ValueTypes
     (ValueType,CreateDate,HTMLType)

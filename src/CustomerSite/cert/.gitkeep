@@ -1,0 +1,12 @@
+# This file exists to keep the cert/ directory tracked in source control even when
+# no .pfx files are present (the .pfx files themselves are gitignored).
+#
+# Place runtime/SPP client-credential certificates here. Filenames are referenced by
+# SaaSApiConfiguration:MTCertPath and (future) SaaSApiConfiguration:RuntimeAppCertPath
+# in App Service Configuration. The CustomerSite.csproj is configured to copy this
+# folder (including the .pfx) to publish output, so a local Publish.ps1 picks the
+# cert up automatically.
+#
+# CI builds without the .pfx present will produce a publish output WITHOUT the cert.
+# That's intentional -- avoid checking the .pfx into source control. Deploy locally
+# from a workstation that has the .pfx, or arrange a secure CI-time injection.

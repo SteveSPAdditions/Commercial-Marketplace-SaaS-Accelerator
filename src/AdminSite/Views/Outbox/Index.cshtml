@@ -1,0 +1,52 @@
+@model IEnumerable<Marketplace.SaaS.Accelerator.DataAccess.Entities.NotificationOutbox>
+@{
+    ViewData["Title"] = "Notification Outbox";
+}
+
+<div class="container">
+    <h2>Dead-lettered notifications</h2>
+    <p class="text-muted">
+        Rows here exhausted their retry budget and are no longer being processed.
+        Use Retry after addressing the underlying delivery problem.
+    </p>
+
+    @if (!Model.Any())
+    {
+        <div class="alert alert-info">No dead-lettered rows. The outbox is healthy.</div>
+    }
+    else
+    {
+        <table class="table table-striped table-sm">
+            <thead>
+                <tr>
+                    <th>Id</th>
+                    <th>Event type</th>
+                    <th>Subscription</th>
+                    <th>Attempts</th>
+                    <th>Created</th>
+                    <th>Last error</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model)
+                {
+                    <tr>
+                        <td>@row.Id</td>
+                        <td>@row.EventType</td>
+                        <td><small>@row.AmpSubscriptionId</small></td>
+                        <td>@row.Attempts</td>
+                        <td>@row.CreatedUtc.ToString("yyyy-MM-dd HH:mm")</td>
+                        <td><small>@row.LastError</small></td>
+                        <td>
+                            <form method="post" asp-controller="Outbox" asp-action="Retry">
+                                <input type="hidden" name="id" value="@row.Id" />
+                                <button type="submit" class="btn btn-sm btn-primary">Retry</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>

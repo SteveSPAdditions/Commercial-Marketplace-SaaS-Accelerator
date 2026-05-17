@@ -11,7 +11,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations.Custom
     {
         public static void BaselineV6_SeedData(this MigrationBuilder migrationBuilder)
         {
-            var seedDate = DateTime.Now;
+            var seedDate = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
             migrationBuilder.Sql(@$"
 IF NOT EXISTS (SELECT * FROM [dbo].[SchedulerFrequency] WHERE [Frequency] = 'OneTime')
 BEGIN

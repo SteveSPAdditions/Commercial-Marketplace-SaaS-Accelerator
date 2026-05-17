@@ -43,6 +43,10 @@ public partial class SaasKitContext : DbContext
     public virtual DbSet<MeteredPlanSchedulerManagement> MeteredPlanSchedulerManagement { get; set; }
     public virtual DbSet<SchedulerManagerView> SchedulerManagerView { get; set; }
 
+    public virtual DbSet<SubscriptionTenantConsent> SubscriptionTenantConsent { get; set; }
+    public virtual DbSet<SubscriptionSite> SubscriptionSite { get; set; }
+    public virtual DbSet<NotificationOutbox> NotificationOutbox { get; set; }
+
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -549,6 +553,57 @@ public partial class SaasKitContext : DbContext
             entity.Property(e => e.PlanId).IsUnicode(false);
             entity.Property(e => e.Dimension).IsUnicode(false);
             entity.Property(e => e.Frequency).IsUnicode(false);
+        });
+
+        modelBuilder.Entity<SubscriptionTenantConsent>(entity =>
+        {
+            entity.HasIndex(e => e.AmpSubscriptionId).IsUnique();
+            entity.HasIndex(e => e.TenantId);
+
+            entity.Property(e => e.AzureRegion).HasMaxLength(16).IsUnicode(false);
+            entity.Property(e => e.AzureRegionSelectedByUpn).HasMaxLength(255).IsUnicode(false);
+            entity.Property(e => e.AzureRegionSelectedUtc).HasColumnType("datetime");
+            entity.Property(e => e.TenantRegionsFanOutCompleteUtc).HasColumnType("datetime");
+            entity.Property(e => e.FanOutFailureRegions).HasMaxLength(2000).IsUnicode(false);
+            entity.Property(e => e.RuntimeAppConsentedUtc).HasColumnType("datetime");
+            entity.Property(e => e.ConsentedByUpn).HasMaxLength(255).IsUnicode(false);
+            entity.Property(e => e.ConsentedByObjectId).HasMaxLength(64).IsUnicode(false);
+            entity.Property(e => e.CreatedUtc).HasColumnType("datetime");
+            entity.Property(e => e.ModifiedUtc).HasColumnType("datetime");
+        });
+
+        modelBuilder.Entity<SubscriptionSite>(entity =>
+        {
+            entity.HasIndex(e => e.AmpSubscriptionId);
+
+            entity.Property(e => e.SharePointSiteUrl).HasMaxLength(500).IsUnicode(false);
+            entity.Property(e => e.GraphSiteId).HasMaxLength(200).IsUnicode(false);
+            entity.Property(e => e.Status).HasMaxLength(32).IsUnicode(false);
+            entity.Property(e => e.CurrentRole).HasMaxLength(16).IsUnicode(false);
+            entity.Property(e => e.PermissionId).HasMaxLength(200).IsUnicode(false);
+            entity.Property(e => e.GrantedUtc).HasColumnType("datetime");
+            entity.Property(e => e.GrantedByUpn).HasMaxLength(255).IsUnicode(false);
+            entity.Property(e => e.DowngradedUtc).HasColumnType("datetime");
+            entity.Property(e => e.FailureReason).HasMaxLength(2000).IsUnicode(false);
+            entity.Property(e => e.CreatedUtc).HasColumnType("datetime");
+            entity.Property(e => e.ModifiedUtc).HasColumnType("datetime");
+        });
+
+        modelBuilder.Entity<NotificationOutbox>(entity =>
+        {
+            entity.HasIndex(e => e.NextAttemptUtc);
+            entity.HasIndex(e => e.IdempotencyKey).IsUnique();
+            entity.HasIndex(e => e.AmpSubscriptionId);
+
+            entity.Property(e => e.EventType).HasMaxLength(64).IsUnicode(false);
+            entity.Property(e => e.EventJson).IsUnicode(false);
+            entity.Property(e => e.IdempotencyKey).HasMaxLength(255).IsUnicode(false);
+            entity.Property(e => e.CreatedUtc).HasColumnType("datetime");
+            entity.Property(e => e.NextAttemptUtc).HasColumnType("datetime");
+            entity.Property(e => e.DeliveredUtc).HasColumnType("datetime");
+            entity.Property(e => e.LeasedUntilUtc).HasColumnType("datetime");
+            entity.Property(e => e.LastError).HasMaxLength(2000).IsUnicode(false);
+            entity.Property(e => e.LastResponseSnippet).HasMaxLength(512).IsUnicode(false);
         });
 
         OnModelCreatingPartial(modelBuilder);

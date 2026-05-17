@@ -1,0 +1,53 @@
+@model Marketplace.SaaS.Accelerator.CustomerSite.Models.SetupViewModel
+@{
+    var stateClass = Model.Step3 switch
+    {
+        Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Complete => "state-complete",
+        Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.NotStarted => "state-notstarted",
+        _ => "state-locked"
+    };
+}
+
+<li class="setup-step @stateClass" data-step="consent">
+    <div class="setup-step__marker">
+        @if (Model.Step3 == Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Complete)
+        {
+            <i class="fa fa-check-circle"></i>
+        }
+        else if (Model.Step3 == Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Locked)
+        {
+            <i class="fa fa-lock"></i>
+        }
+        else
+        {
+            <i class="fa fa-circle-o"></i>
+        }
+    </div>
+    <div class="setup-step__body">
+        <h3 class="setup-step__title">Tenant consent for Read and Understood</h3>
+
+        @if (Model.Step3 == Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Locked)
+        {
+            <p class="setup-step__meta">Available after region selection.</p>
+        }
+        else if (Model.Consent != null && Model.Consent.Granted)
+        {
+            <p class="setup-step__meta">
+                Granted by @Model.Consent.GrantedByUpn
+                @if (Model.Consent.GrantedUtc.HasValue)
+                {
+                    <text> on @Model.Consent.GrantedUtc.Value.ToString("yyyy-MM-dd")</text>
+                }
+            </p>
+        }
+        else
+        {
+            <p class="setup-step__meta">
+                Grant tenant-wide consent so the Read and Understood runtime can be installed on the SharePoint sites you choose.
+            </p>
+            <a class="cm-button-default" href="/Setup/@Model.AmpSubscriptionId/Consent">
+                Grant tenant consent
+            </a>
+        }
+    </div>
+</li>

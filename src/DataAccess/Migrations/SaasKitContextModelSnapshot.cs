@@ -17,10 +17,10 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "6.0.1")
+                .HasAnnotation("ProductVersion", "8.0.6")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
-            SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder, 1L, 1);
+            SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
             modelBuilder.Entity("Marketplace.SaaS.Accelerator.DataAccess.Entities.ApplicationConfiguration", b =>
                 {
@@ -29,7 +29,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .HasColumnType("int")
                         .HasColumnName("ID");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Description")
                         .HasMaxLength(255)
@@ -53,7 +53,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime?>("ActionTime")
                         .HasColumnType("datetime");
@@ -86,10 +86,10 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .HasColumnType("int")
                         .HasColumnName("ID");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<decimal>("VersionNumber")
-                        .HasColumnType("decimal(6,2)");
+                        .HasColumnType("decimal(6, 2)");
 
                     b.ToTable("DatabaseVersionHistory");
                 });
@@ -101,7 +101,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .HasColumnType("int")
                         .HasColumnName("ID");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Bcc")
                         .HasMaxLength(1000)
@@ -156,7 +156,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("EventsId"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("EventsId"));
 
                     b.Property<DateTime?>("CreateDate")
                         .HasColumnType("datetime");
@@ -180,7 +180,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<int>("RoleId")
                         .HasColumnType("int");
@@ -203,7 +203,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<int>("CreatedBy")
                         .HasColumnType("int");
@@ -250,7 +250,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime?>("CreatedDate")
                         .HasColumnType("datetime");
@@ -281,7 +281,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<int?>("DimensionId")
                         .IsRequired()
@@ -328,6 +328,72 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                     b.ToTable("MeteredPlanSchedulerManagement");
                 });
 
+            modelBuilder.Entity("Marketplace.SaaS.Accelerator.DataAccess.Entities.NotificationOutbox", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<Guid>("AmpSubscriptionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("datetime");
+
+                    b.Property<bool>("DeadLettered")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("DeliveredUtc")
+                        .HasColumnType("datetime");
+
+                    b.Property<string>("EventJson")
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(max)");
+
+                    b.Property<string>("EventType")
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(255)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2000)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<string>("LastResponseSnippet")
+                        .HasMaxLength(512)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<DateTime?>("LeasedUntilUtc")
+                        .HasColumnType("datetime");
+
+                    b.Property<DateTime>("NextAttemptUtc")
+                        .HasColumnType("datetime");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AmpSubscriptionId");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique()
+                        .HasFilter("[IdempotencyKey] IS NOT NULL");
+
+                    b.HasIndex("NextAttemptUtc");
+
+                    b.ToTable("NotificationOutbox");
+                });
+
             modelBuilder.Entity("Marketplace.SaaS.Accelerator.DataAccess.Entities.OfferAttributes", b =>
                 {
                     b.Property<int>("Id")
@@ -335,7 +401,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .HasColumnType("int")
                         .HasColumnName("ID");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime?>("CreateDate")
                         .HasColumnType("datetime");
@@ -405,7 +471,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime?>("CreateDate")
                         .HasColumnType("datetime");
@@ -438,7 +504,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("PlanAttributeId"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("PlanAttributeId"));
 
                     b.Property<DateTime?>("CreateDate")
                         .HasColumnType("datetime");
@@ -502,7 +568,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<bool?>("CopyToCustomer")
                         .HasColumnType("bit");
@@ -584,7 +650,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Description")
                         .HasMaxLength(500)
@@ -626,7 +692,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Name")
                         .HasMaxLength(50)
@@ -644,7 +710,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Frequency")
                         .IsRequired()
@@ -695,7 +761,9 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                     b.Property<string>("SubscriptionName")
                         .HasColumnType("nvarchar(max)");
 
-                    b.ToView("SchedulerManagerView");
+                    b.ToTable((string)null);
+
+                    b.ToView("SchedulerManagerView", (string)null);
                 });
 
             modelBuilder.Entity("Marketplace.SaaS.Accelerator.DataAccess.Entities.SubscriptionAttributeValues", b =>
@@ -705,7 +773,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .HasColumnType("int")
                         .HasColumnName("ID");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime?>("CreateDate")
                         .HasColumnType("datetime");
@@ -743,7 +811,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Attribute")
                         .HasMaxLength(20)
@@ -782,7 +850,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Name")
                         .HasMaxLength(225)
@@ -886,13 +954,142 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                     b.ToTable("SubscriptionParametersOutput");
                 });
 
+            modelBuilder.Entity("Marketplace.SaaS.Accelerator.DataAccess.Entities.SubscriptionSite", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<Guid>("AmpSubscriptionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("CreatedUtc")
+                        .HasColumnType("datetime");
+
+                    b.Property<string>("CurrentRole")
+                        .HasMaxLength(16)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<DateTime?>("DowngradedUtc")
+                        .HasColumnType("datetime");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(2000)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<string>("GrantedByUpn")
+                        .HasMaxLength(255)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime?>("GrantedUtc")
+                        .HasColumnType("datetime");
+
+                    b.Property<string>("GraphSiteId")
+                        .HasMaxLength(200)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<DateTime?>("ModifiedUtc")
+                        .HasColumnType("datetime");
+
+                    b.Property<string>("PermissionId")
+                        .HasMaxLength(200)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("SharePointSiteUrl")
+                        .HasMaxLength(500)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("Status")
+                        .HasMaxLength(32)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AmpSubscriptionId");
+
+                    b.ToTable("SubscriptionSite");
+                });
+
+            modelBuilder.Entity("Marketplace.SaaS.Accelerator.DataAccess.Entities.SubscriptionTenantConsent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<Guid>("AmpSubscriptionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AzureRegion")
+                        .HasMaxLength(16)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<string>("AzureRegionSelectedByUpn")
+                        .HasMaxLength(255)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime?>("AzureRegionSelectedUtc")
+                        .HasColumnType("datetime");
+
+                    b.Property<string>("ConsentedByObjectId")
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("ConsentedByUpn")
+                        .HasMaxLength(255)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime?>("CreatedUtc")
+                        .HasColumnType("datetime");
+
+                    b.Property<string>("FanOutFailureRegions")
+                        .HasMaxLength(2000)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<DateTime?>("ModifiedUtc")
+                        .HasColumnType("datetime");
+
+                    b.Property<DateTime?>("RuntimeAppConsentedUtc")
+                        .HasColumnType("datetime");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("TenantRegionsFanOutCompleteUtc")
+                        .HasColumnType("datetime");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AmpSubscriptionId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("SubscriptionTenantConsent");
+                });
+
             modelBuilder.Entity("Marketplace.SaaS.Accelerator.DataAccess.Entities.Subscriptions", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("AmpOfferId")
                         .HasColumnType("nvarchar(max)");
@@ -968,7 +1165,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("UserId"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("UserId"));
 
                     b.Property<DateTime?>("CreatedDate")
                         .HasColumnType("datetime");
@@ -994,7 +1191,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ValueTypeId"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ValueTypeId"));
 
                     b.Property<DateTime?>("CreateDate")
                         .HasColumnType("datetime");
@@ -1023,7 +1220,7 @@ namespace Marketplace.SaaS.Accelerator.DataAccess.Migrations
                         .HasColumnType("int")
                         .HasColumnName("ID");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Description")
                         .IsUnicode(false)

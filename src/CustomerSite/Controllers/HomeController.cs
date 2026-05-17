@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using System.Web;
 using Marketplace.SaaS.Accelerator.DataAccess.Contracts;
 using Marketplace.SaaS.Accelerator.DataAccess.Entities;
+using Marketplace.SaaS.Accelerator.Services.Configurations;
 using Marketplace.SaaS.Accelerator.Services.Contracts;
 using Marketplace.SaaS.Accelerator.Services.Exceptions;
 using Marketplace.SaaS.Accelerator.Services.Models;
@@ -90,6 +91,10 @@ public class HomeController : BaseController
 
     private readonly IWebNotificationService _webNotificationService;
 
+    private readonly SaaSApiClientConfiguration saaSApiClientConfiguration;
+
+    private readonly ISetupStatusService setupStatusService;
+
     private SubscriptionService subscriptionService = null;
 
     private ApplicationLogService applicationLogService = null;
@@ -121,24 +126,28 @@ public class HomeController : BaseController
     /// <param name="loggerFactory">The logger factory.</param>
     /// <param name="emailService">The email service.</param>
     public HomeController(
-        SaaSClientLogger<HomeController> logger, 
-        IFulfillmentApiService apiService, 
-        ISubscriptionsRepository subscriptionRepo, 
-        IPlansRepository planRepository, 
-        IUsersRepository userRepository, 
-        IApplicationLogRepository applicationLogRepository, 
-        ISubscriptionLogRepository subscriptionLogsRepo, 
-        IApplicationConfigRepository applicationConfigRepository, 
-        IEmailTemplateRepository emailTemplateRepository, 
-        IOffersRepository offersRepository, 
-        IPlanEventsMappingRepository planEventsMappingRepository, 
-        IOfferAttributesRepository offerAttributesRepository, 
-        IEventsRepository eventsRepository, 
-        ILoggerFactory loggerFactory, 
+        SaaSClientLogger<HomeController> logger,
+        IFulfillmentApiService apiService,
+        ISubscriptionsRepository subscriptionRepo,
+        IPlansRepository planRepository,
+        IUsersRepository userRepository,
+        IApplicationLogRepository applicationLogRepository,
+        ISubscriptionLogRepository subscriptionLogsRepo,
+        IApplicationConfigRepository applicationConfigRepository,
+        IEmailTemplateRepository emailTemplateRepository,
+        IOffersRepository offersRepository,
+        IPlanEventsMappingRepository planEventsMappingRepository,
+        IOfferAttributesRepository offerAttributesRepository,
+        IEventsRepository eventsRepository,
+        ILoggerFactory loggerFactory,
         IEmailService emailService,
         IWebNotificationService webNotificationService,
-        IAppVersionService appVersionService) : base(appVersionService)
+        IAppVersionService appVersionService,
+        SaaSApiClientConfiguration saaSApiClientConfiguration,
+        ISetupStatusService setupStatusService) : base(appVersionService)
     {
+        this.saaSApiClientConfiguration = saaSApiClientConfiguration;
+        this.setupStatusService = setupStatusService;
         this.apiService = apiService;
         this.subscriptionRepository = subscriptionRepo;
         this.subscriptionLogRepository = subscriptionLogsRepo;
@@ -333,6 +342,12 @@ public class HomeController : BaseController
                 }
 
                 subscriptionDetail.SaaSAppUrl = this.apiService.GetSaaSAppURL();
+
+                var subscribedIds = subscriptionDetail.Subscriptions
+                    .Where(s => s.SubscriptionStatus == SubscriptionStatusEnumExtension.Subscribed)
+                    .Select(s => s.Id)
+                    .ToList();
+                subscriptionDetail.SetupStatuses = this.setupStatusService.GetStatuses(subscribedIds);
 
                 if (this.TempData["ErrorMsg"] != null)
                 {
@@ -650,6 +665,12 @@ public class HomeController : BaseController
                 }
 
                 this.notificationStatusHandlers.Process(subscriptionId);
+
+                if (operation == "Activate"
+                    && this.saaSApiClientConfiguration?.RedirectActivateToSetup == true)
+                {
+                    return this.RedirectToAction("Index", "Setup", new { subscriptionId });
+                }
 
                 return this.RedirectToAction(nameof(this.ProcessMessage), new { action = operation, status = operation });
             }

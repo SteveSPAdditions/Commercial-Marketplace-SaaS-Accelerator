@@ -28,15 +28,20 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="8.0.0" />
-    <PackageReference Include="Microsoft.AspNetCore.DataProtection.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.Abstractions" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Identity.Web" Version="3.13.0" />
+    <PackageReference Include="Microsoft.Identity.Web.TokenAcquisition" Version="3.13.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.6" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.6">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="3.1.1" />
+    <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="2.22.0" />
 	  <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="4.14.0" />
 	  <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+	  <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.14.0" />
+	  <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.Common" Version="4.14.0" />
 	  
   </ItemGroup>
 
@@ -48,6 +53,19 @@
     <Content Update="wwwroot\favicon.ico">
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+  <!--
+    Client-credential certificates for the SPP (and future runtime app credential).
+    .pfx files are .gitignored. dotnet publish copies whatever is locally present in
+    cert/ into the publish output -> appears at D:\home\site\wwwroot\cert\*.pfx on
+    Azure App Service, which is what SaaSApiConfiguration__MTCertPath references.
+  -->
+  <ItemGroup>
+    <Content Include="cert\**\*.pfx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
     </Content>
   </ItemGroup>
 

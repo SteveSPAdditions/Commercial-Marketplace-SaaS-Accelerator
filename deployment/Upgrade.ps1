@@ -119,11 +119,21 @@ if ($isPEenv -ne 'Y' -and $isPEenv -ne 'y') {
 		--query "{value:value}" `
 		--output tsv
 
-	#Extract components from ConnectionString since Invoke-Sqlcmd needs them separately
-	$Server = String-Between -source $ConnectionString -start "Data Source=" -end ";"
-	$Database = String-Between -source $ConnectionString -start "Initial Catalog=" -end ";"
-	$User = String-Between -source $ConnectionString -start "User Id=" -end ";"
-	$Pass = String-Between -source $ConnectionString -start "Password=" -end ";"
+	# Build a local-only variant of the connection string for Invoke-Sqlcmd.
+	# Strips any Authentication=... keyword (we will pass an AAD access token
+	# from the current az CLI session via -AccessToken) and ensures the cert
+	# check is relaxed so Invoke-Sqlcmd does not reject the Azure SQL cert.
+	$LocalCnx = $ConnectionString -replace '(?i)(^|;)\s*Authentication\s*=[^;]*;?', '$1'
+	if ($LocalCnx -notmatch '(?i)TrustServerCertificate\s*=') {
+		if (-not $LocalCnx.TrimEnd().EndsWith(';')) { $LocalCnx += ';' }
+		$LocalCnx += 'TrustServerCertificate=True;'
+	}
+
+	Write-host "## STEP 1.1a Acquiring AAD access token for Azure SQL from the current az CLI session"
+	$SqlAccessToken = az account get-access-token --resource https://database.windows.net/ --query accessToken -o tsv
+	if ([string]::IsNullOrWhiteSpace($SqlAccessToken)) {
+		throw "Could not obtain an Azure SQL access token. Run 'az login' and retry."
+	}
 
 	Write-host "## STEP 1.2 Update connection string to the Adminsite project"
 	Set-Content -Path ../src/AdminSite/appsettings.Development.json -value "{`"ConnectionStrings`": {`"DefaultConnection`":`"$ConnectionString`"}}"
@@ -183,11 +193,11 @@ if ($isPEenv -ne 'Y' -and $isPEenv -ne 'y') {
 
 
 	Write-host "## STEP 1.4 Running compatibility script"
-	Invoke-Sqlcmd -query $compatibilityScript -ServerInstance $Server -database $Database -Username $User -Password $Pass
+	Invoke-Sqlcmd -query $compatibilityScript -ConnectionString $LocalCnx -AccessToken $SqlAccessToken
 
 
 	Write-host "## STEP 1.5 START: Run migration against database"
-	Invoke-Sqlcmd -inputFile script.sql -ServerInstance $Server -database $Database -Username $User -Password $Pass
+	Invoke-Sqlcmd -inputFile script.sql -ConnectionString $LocalCnx -AccessToken $SqlAccessToken
 
 } else
 {

@@ -1,0 +1,98 @@
+@model Marketplace.SaaS.Accelerator.CustomerSite.Models.SetupViewModel
+@{
+    var stateClass = Model.Step4 switch
+    {
+        Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Complete => "state-complete",
+        Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.InProgress => "state-inprogress",
+        Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.NotStarted => "state-notstarted",
+        _ => "state-locked"
+    };
+}
+
+<li class="setup-step @stateClass" data-step="sites">
+    <div class="setup-step__marker">
+        @if (Model.Step4 == Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Locked)
+        {
+            <i class="fa fa-lock"></i>
+        }
+        else
+        {
+            <i class="fa fa-circle-o"></i>
+        }
+    </div>
+    <div class="setup-step__body">
+        <h3 class="setup-step__title">SharePoint sites</h3>
+
+        @if (Model.Step4 == Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Locked)
+        {
+            <p class="setup-step__meta">Available after region selection has propagated and tenant consent is granted.</p>
+        }
+        else
+        {
+            @if (Model.Sites != null && Model.Sites.Count > 0)
+            {
+                <table class="setup-sites-table">
+                    <thead>
+                        <tr>
+                            <th>Site URL</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var site in Model.Sites)
+                        {
+                            <tr>
+                                <td>@site.SharePointSiteUrl</td>
+                                <td>@(string.IsNullOrEmpty(site.CurrentRole) ? "—" : site.CurrentRole)</td>
+                                <td>@site.Status</td>
+                                <td>
+                                    @if (string.IsNullOrEmpty(site.CurrentRole))
+                                    {
+                                        @* Initial enrollment -> grant Manage by default. *@
+                                        <form method="post" action="/Setup/@Model.AmpSubscriptionId/Sites/@site.Id/Grant" class="setup-inline-form">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="cm-button-default">Grant access</button>
+                                        </form>
+                                    }
+                                    else if (string.Equals(site.CurrentRole, "manage", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        @* On Manage -> offer to drop to Read. Confirmation explains the limitation. *@
+                                        <form method="post" action="/Setup/@Model.AmpSubscriptionId/Sites/@site.Id/SwitchToRead" class="setup-inline-form" onsubmit="return confirmSwitchToRead();">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="cm-button-link">Switch to Read</button>
+                                        </form>
+                                    }
+                                    else if (string.Equals(site.CurrentRole, "read", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        @* On Read -> offer to elevate back to Manage. Elevation is the safer-direction action -> no warning. *@
+                                        <form method="post" action="/Setup/@Model.AmpSubscriptionId/Sites/@site.Id/SwitchToManage" class="setup-inline-form">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="cm-button-link">Switch to Manage</button>
+                                        </form>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <p class="setup-step__meta">No sites enrolled yet.</p>
+            }
+
+            <form method="post" action="/Setup/@Model.AmpSubscriptionId/AddSite" class="setup-add-site mt20">
+                @Html.AntiForgeryToken()
+                <label for="sharePointSiteUrl" class="setup-input-label">SharePoint site URL</label>
+                <div class="setup-input-row">
+                    <input type="url" id="sharePointSiteUrl" name="sharePointSiteUrl" required
+                           placeholder="https://contoso.sharepoint.com/sites/policies"
+                           class="setup-input" />
+                    <button type="submit" class="cm-button-default">Add site</button>
+                </div>
+            </form>
+        }
+    </div>
+</li>

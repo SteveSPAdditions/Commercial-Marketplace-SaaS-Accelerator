@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace Marketplace.SaaS.Accelerator.Services.Models;
 
@@ -38,4 +39,10 @@ public class SubscriptionViewModel
     /// The saa s application URL.
     /// </value>
     public string SaaSAppUrl { get; set; }
+
+    /// <summary>
+    /// Per-subscription Setup-flow status, keyed by AMP subscription id. May be empty
+    /// when the host hasn't computed it (e.g. older views that didn't ask for it).
+    /// </summary>
+    public IDictionary<Guid, SetupStatusSummary> SetupStatuses { get; set; } = new Dictionary<Guid, SetupStatusSummary>();
 }

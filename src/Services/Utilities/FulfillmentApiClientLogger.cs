@@ -18,16 +18,15 @@ public class FulfillmentApiClientLogger : ILogger
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FulfillmentApiClientLogger"/> class.
+    /// The logger comes via DI so it participates in the host's pipeline (Application
+    /// Insights, filesystem, console -- whatever the host is configured with). Prior
+    /// versions built an isolated console-only LoggerFactory here, which meant the
+    /// original Microsoft Fulfillment API error messages never reached AI and were
+    /// lost on Azure App Service.
     /// </summary>
-    public FulfillmentApiClientLogger()
+    public FulfillmentApiClientLogger(ILogger<FulfillmentApiService> logger)
     {
-        var loggerFactory = LoggerFactory.Create(builder =>
-        {
-            builder
-                .AddConsole();
-        });
-
-        this.logger = loggerFactory.CreateLogger<FulfillmentApiService>();
+        this.logger = logger;
     }
 
     /// <summary>

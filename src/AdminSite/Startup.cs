@@ -64,6 +64,17 @@ public class Startup
     /// <param name="services">The services.</param>
     public void ConfigureServices(IServiceCollection services)
     {
+        // Application Insights. Only register when the connection string is genuinely
+        // valid -- AddApplicationInsightsTelemetry() throws ArgumentException at startup
+        // if APPLICATIONINSIGHTS_CONNECTION_STRING is present but blank or malformed,
+        // which would 500.30 the whole app. Absent setting is fine; empty is fatal.
+        var aiConnStr = this.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"];
+        if (!string.IsNullOrWhiteSpace(aiConnStr)
+            && aiConnStr.IndexOf("InstrumentationKey", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            services.AddApplicationInsightsTelemetry();
+        }
+
         services.Configure<CookiePolicyOptions>(options =>
         {
             // This lambda determines whether user consent for non-essential cookies is needed for a given request.
@@ -84,7 +95,10 @@ public class Startup
             SaaSAppUrl = this.Configuration["SaaSApiConfiguration:SaaSAppUrl"],
             SignedOutRedirectUri = this.Configuration["SaaSApiConfiguration:SignedOutRedirectUri"],
             TenantId = this.Configuration["SaaSApiConfiguration:TenantId"] ?? Guid.Empty.ToString(),
-            IsAdminPortalMultiTenant = this.Configuration["SaaSApiConfiguration:IsAdminPortalMultiTenant"]
+            IsAdminPortalMultiTenant = this.Configuration["SaaSApiConfiguration:IsAdminPortalMultiTenant"],
+            // Required by ReconcileController to verify HMAC on /api/saasaccelerator/reconcile-snapshot.
+            // Must match the value rau-portal uses for signing outbound /api/saasaccelerator/event.
+            LegerisSignalingHmacSecret = this.Configuration["SaaSApiConfiguration:LegerisSignalingHmacSecret"],
         };
         var knownUsers = new KnownUsersModel()
         {
@@ -143,7 +157,11 @@ public class Startup
         }
 
         services
-            .AddSingleton<IFulfillmentApiService>(new FulfillmentApiService(new MarketplaceSaaSClient(fulfillmentBaseApi, creds), config, new FulfillmentApiClientLogger()))
+            .AddSingleton<FulfillmentApiClientLogger>()
+            .AddSingleton<IFulfillmentApiService>(sp => new FulfillmentApiService(
+                new MarketplaceSaaSClient(fulfillmentBaseApi, creds),
+                config,
+                sp.GetRequiredService<FulfillmentApiClientLogger>()))
             .AddSingleton<IMeteredBillingApiService>(new MeteredBillingApiService(new MarketplaceMeteringClient(creds), config, new SaaSClientLogger<MeteredBillingApiService>()))
             .AddSingleton<SaaSApiClientConfiguration>(config)
             .AddSingleton<KnownUsersModel>(knownUsers);
@@ -246,5 +264,8 @@ public class Startup
         services.AddScoped<SaaSClientLogger<ApplicationLogController>>();
         services.AddScoped<SaaSClientLogger<ApplicationConfigController>>();
         services.AddScoped<SaaSClientLogger<SchedulerController>>();
+        services.AddScoped<INotificationOutboxRepository, NotificationOutboxRepository>();
+        services.AddScoped<SaaSClientLogger<OutboxController>>();
+        services.AddScoped<SaaSClientLogger<ReconcileController>>();
     }
 }

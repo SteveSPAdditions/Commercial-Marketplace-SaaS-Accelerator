@@ -1,0 +1,108 @@
+@model Marketplace.SaaS.Accelerator.CustomerSite.Models.SetupViewModel
+@{
+    var picker = Model.RegionPicker;
+    var stateClass = Model.Step2 switch
+    {
+        Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Complete => "state-complete",
+        Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.InProgress => "state-inprogress",
+        Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.NotStarted => "state-notstarted",
+        _ => "state-locked"
+    };
+}
+
+<li class="setup-step @stateClass" data-step="region">
+    <div class="setup-step__marker">
+        @if (Model.Step2 == Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Complete)
+        {
+            <i class="fa fa-check-circle"></i>
+        }
+        else if (Model.Step2 == Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.InProgress)
+        {
+            <i class="fa fa-circle-o-notch fa-spin"></i>
+        }
+        else
+        {
+            <i class="fa fa-circle-o"></i>
+        }
+    </div>
+    <div class="setup-step__body">
+        <h3 class="setup-step__title">Database region</h3>
+
+        @if (picker == null)
+        {
+            <p class="setup-step__meta">Loading region information&hellip;</p>
+        }
+        else if (picker.Mode == "saved")
+        {
+            <p class="setup-step__meta">
+                <strong>@picker.SelectedRegion</strong>
+                @if (picker.SelectedUtc.HasValue)
+                {
+                    <text> &middot; selected @picker.SelectedUtc.Value.ToString("yyyy-MM-dd") by @picker.SelectedByUpn</text>
+                }
+            </p>
+            @if (picker.FanOutComplete)
+            {
+                <p class="setup-step__hint">Propagated to all regions.</p>
+            }
+            else
+            {
+                <p class="setup-step__hint setup-step__hint--inflight">
+                    <i class="fa fa-circle-o-notch fa-spin"></i>
+                    Propagating to all regions&hellip;
+                    <span class="setup-step__hint--slow" style="display:none">This is taking longer than expected. We'll keep retrying.</span>
+                </p>
+            }
+        }
+        else if (picker.Mode == "detected")
+        {
+            <p class="setup-step__meta">
+                Detected from your tenant's existing presence: <strong>@picker.SelectedRegionFriendly</strong>
+            </p>
+            <form method="post" asp-controller="Setup" asp-action="Region" asp-route-subscriptionId="@Model.AmpSubscriptionId" class="setup-region-form">
+                <input type="hidden" name="azureRegion" value="@picker.SelectedRegion" />
+                <button type="submit" class="cm-button-default">Confirm region</button>
+            </form>
+        }
+        else
+        {
+            @if (picker.Mode == "fallback")
+            {
+                <p class="setup-step__hint setup-step__hint--warn">
+                    <i class="fa fa-exclamation-triangle"></i>
+                    Couldn't reach the region service. Using fallback list.
+                    @if (!string.IsNullOrEmpty(picker.ErrorMessage))
+                    {
+                        <span class="setup-step__hint-detail">@picker.ErrorMessage</span>
+                    }
+                </p>
+            }
+            else
+            {
+                <p class="setup-step__meta">Your Read and Understood data will be stored in this Azure region. This cannot be easily changed.</p>
+            }
+
+            @if (picker.Selectors != null && picker.Selectors.Count > 0)
+            {
+                <form method="post" asp-controller="Setup" asp-action="Region" asp-route-subscriptionId="@Model.AmpSubscriptionId" class="setup-region-form">
+                    <div class="setup-region-grid">
+                        @foreach (var selector in picker.Selectors)
+                        {
+                            <label class="setup-region-option">
+                                <input type="radio" name="azureRegion" value="@selector.Key" required />
+                                <span>@selector.Text</span>
+                            </label>
+                        }
+                    </div>
+                    <button type="submit" class="cm-button-default mt20">Save region</button>
+                </form>
+            }
+            else
+            {
+                <p class="setup-step__hint setup-step__hint--warn">
+                    No regions available. Contact support.
+                </p>
+            }
+        }
+    </div>
+</li>
