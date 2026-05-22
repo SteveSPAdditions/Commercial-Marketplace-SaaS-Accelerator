@@ -1,0 +1,12 @@
+[
+  { "name": "ServiceBusConnection",                  "value": "@Microsoft.KeyVault(VaultName=rau-kv;SecretName=WebhookBufferSbConnection)", "slotSetting": false },
+  { "name": "BufferOptions__QueueName",              "value": "marketplace-webhook",                                                          "slotSetting": false },
+  { "name": "BufferOptions__MaxDeliveryCount",       "value": "10",                                                                           "slotSetting": false },
+  { "name": "PortalOptions__BaseUrl",                "value": "https://rau-portal.azurewebsites.net",                                         "slotSetting": false },
+  { "name": "PortalOptions__HmacSecret",             "value": "@Microsoft.KeyVault(VaultName=rau-kv;SecretName=WebhookBufferHmacSecret)",     "slotSetting": false },
+  { "name": "PortalOptions__TimeoutSeconds",         "value": "8",                                                                            "slotSetting": false },
+  { "name": "AadOptions__TenantId",                  "value": "REPLACE_WITH_TENANT_ID",                                                       "slotSetting": false },
+  { "name": "AadOptions__ClientId",                  "value": "REPLACE_WITH_SPP_FULFILLMENT_APP_CLIENT_ID",                                   "slotSetting": false },
+  { "name": "AadOptions__Resource",                  "value": "20e940b3-4c77-4b0b-9a53-9e16a1b010a7",                                         "slotSetting": false },
+  { "name": "APPLICATIONINSIGHTS_CONNECTION_STRING", "value": "REPLACE_WITH_AI_CONNECTION_STRING",                                            "slotSetting": false }
+]

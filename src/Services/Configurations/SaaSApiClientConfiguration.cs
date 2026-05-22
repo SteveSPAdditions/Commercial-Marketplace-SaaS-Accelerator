@@ -137,6 +137,9 @@ public class SaaSApiClientConfiguration
     /// <summary>Pre-shared HMAC-SHA256 secret used to sign events posted to the Legeris signaling endpoint.</summary>
     public string LegerisSignalingHmacSecret { get; set; }
 
+    /// <summary>Pre-shared HMAC-SHA256 secret used to verify inbound webhook calls forwarded by the WebhookBuffer Function App.</summary>
+    public string WebhookBufferHmacSecret { get; set; }
+
     /// <summary>JSON-encoded fallback region selector list used when Function1 is unreachable.</summary>
     public string AzureRegionSelectorsFallback { get; set; }
 

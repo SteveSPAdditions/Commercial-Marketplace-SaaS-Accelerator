@@ -99,6 +99,7 @@ public class Startup
             // Required by ReconcileController to verify HMAC on /api/saasaccelerator/reconcile-snapshot.
             // Must match the value rau-portal uses for signing outbound /api/saasaccelerator/event.
             LegerisSignalingHmacSecret = this.Configuration["SaaSApiConfiguration:LegerisSignalingHmacSecret"],
+            WebhookBufferHmacSecret = this.Configuration["SaaSApiConfiguration:WebhookBufferHmacSecret"],
         };
         var knownUsers = new KnownUsersModel()
         {
@@ -265,6 +266,7 @@ public class Startup
         services.AddScoped<SaaSClientLogger<ApplicationConfigController>>();
         services.AddScoped<SaaSClientLogger<SchedulerController>>();
         services.AddScoped<INotificationOutboxRepository, NotificationOutboxRepository>();
+        services.AddScoped<IWebhookOperationLogRepository, WebhookOperationLogRepository>();
         services.AddScoped<SaaSClientLogger<OutboxController>>();
         services.AddScoped<SaaSClientLogger<ReconcileController>>();
     }

@@ -363,3 +363,10 @@ src/CustomerSite/appsettings.Development.json
 
 # Claude Code local-only settings (per-user permissions, not shared)
 .claude/settings.local.json
+
+# Azure Functions local settings (per-developer connection strings + secrets)
+src/WebhookBuffer/local.settings.json
+
+# Filled-in copies of the WebhookBuffer App Settings JSON (template only is committed)
+deployment/webhookbuffer.appsettings.json
+deployment/webhookbuffer.appsettings.local.json

@@ -5,6 +5,7 @@
 using System;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Marketplace.SaaS.Accelerator.CustomerSite.WebHook;
 using Marketplace.SaaS.Accelerator.DataAccess.Contracts;
 using Marketplace.SaaS.Accelerator.Services.Configurations;
 using Marketplace.SaaS.Accelerator.Services.Exceptions;
@@ -22,6 +23,7 @@ namespace Marketplace.SaaS.Accelerator.CustomerSite.Controllers.WebHook;
 [Route("api/[controller]")]
 [ApiController]
 [IgnoreAntiforgeryTokenAttribute]
+[ServiceFilter(typeof(BufferHmacFilter))]
 public class AzureWebhookController : ControllerBase
 {
     /// <summary>
@@ -79,6 +81,11 @@ public class AzureWebhookController : ControllerBase
     /// </summary>
     private readonly ApplicationConfigService applicationConfigService;
 
+    /// <summary>
+    /// The webhook operation log repository.
+    /// </summary>
+    private readonly IWebhookOperationLogRepository webhookOperationLogRepository;
+
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AzureWebhookController"/> class.
@@ -91,14 +98,15 @@ public class AzureWebhookController : ControllerBase
     /// <param name="configuration">The SaaSApiClientConfiguration from ENV</param>
     /// <param name="validateJwtToken">The validateJwtToken utility</param>
     /// <param name="applicationConfigRepository">The application config repository</param>
-    public AzureWebhookController(IApplicationLogRepository applicationLogRepository, 
-                                  IWebhookProcessor webhookProcessor, 
-                                  ISubscriptionLogRepository subscriptionsLogRepository, 
-                                  IPlansRepository planRepository, 
-                                  ISubscriptionsRepository subscriptionsRepository, 
+    public AzureWebhookController(IApplicationLogRepository applicationLogRepository,
+                                  IWebhookProcessor webhookProcessor,
+                                  ISubscriptionLogRepository subscriptionsLogRepository,
+                                  IPlansRepository planRepository,
+                                  ISubscriptionsRepository subscriptionsRepository,
                                   SaaSApiClientConfiguration configuration,
                                   ValidateJwtToken validateJwtToken,
-                                  IApplicationConfigRepository applicationConfigRepository)
+                                  IApplicationConfigRepository applicationConfigRepository,
+                                  IWebhookOperationLogRepository webhookOperationLogRepository)
     {
         this.applicationLogRepository = applicationLogRepository;
         this.subscriptionsRepository = subscriptionsRepository;
@@ -111,6 +119,7 @@ public class AzureWebhookController : ControllerBase
         this.validateJwtToken = validateJwtToken;
         this.applicationConfigRepository = applicationConfigRepository;
         this.applicationConfigService = new ApplicationConfigService(this.applicationConfigRepository);
+        this.webhookOperationLogRepository = webhookOperationLogRepository;
     }
 
     /// <summary>
@@ -123,9 +132,17 @@ public class AzureWebhookController : ControllerBase
         {
             await this.applicationLogService.AddApplicationLog("The azure Webhook Triggered.").ConfigureAwait(false);
 
+            // The BufferHmacFilter has already authenticated the call when it carries the
+            // X-Webhook-Source: Buffer header. Skip JWT validation in that case — the
+            // Function App authenticated the Microsoft caller before forwarding.
+            var fromBuffer = string.Equals(
+                this.HttpContext.Request.Headers["X-Webhook-Source"].ToString(),
+                "Buffer",
+                StringComparison.OrdinalIgnoreCase);
+
             var appConfigValueConversion = bool.TryParse(this.applicationConfigService.GetValueByName("ValidateWebhookJwtToken"), out bool appConfigValue);
-            
-            if (appConfigValueConversion && appConfigValue)
+
+            if (!fromBuffer && appConfigValueConversion && appConfigValue)
             {
                 try
                 {
@@ -143,9 +160,36 @@ public class AzureWebhookController : ControllerBase
 
             if (request != null)
             {
+                // Idempotency short-circuit: if we have already processed this OperationId,
+                // log and return 200 without re-running handlers. Microsoft + the buffer can
+                // both deliver the same OperationId more than once.
+                if (request.OperationId != Guid.Empty)
+                {
+                    var existing = this.webhookOperationLogRepository.Get(request.OperationId);
+                    if (existing != null)
+                    {
+                        await this.applicationLogService.AddApplicationLog(
+                            $"Webhook OperationId {request.OperationId} already processed at {existing.ReceivedUtc:O} ({existing.ResultStatus}); skipping.").ConfigureAwait(false);
+                        return Ok();
+                    }
+                }
+
                 var json = JsonSerializer.Serialize(request);
                 await this.applicationLogService.AddApplicationLog("Webhook Serialize Object " + json).ConfigureAwait(false);
                 await this.webhookProcessor.ProcessWebhookNotificationAsync(request, configuration).ConfigureAwait(false);
+
+                if (request.OperationId != Guid.Empty)
+                {
+                    this.webhookOperationLogRepository.Save(new DataAccess.Entities.WebhookOperationLog
+                    {
+                        OperationId = request.OperationId,
+                        ReceivedUtc = DateTime.UtcNow,
+                        Action = request.Action.ToString(),
+                        SubscriptionId = request.SubscriptionId,
+                        ResultStatus = "Processed",
+                    });
+                }
+
                 return Ok();
             }
             throw new MarketplaceException("Request payload is null.");

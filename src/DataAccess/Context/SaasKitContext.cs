@@ -46,6 +46,7 @@ public partial class SaasKitContext : DbContext
     public virtual DbSet<SubscriptionTenantConsent> SubscriptionTenantConsent { get; set; }
     public virtual DbSet<SubscriptionSite> SubscriptionSite { get; set; }
     public virtual DbSet<NotificationOutbox> NotificationOutbox { get; set; }
+    public virtual DbSet<WebhookOperationLog> WebhookOperationLog { get; set; }
 
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -604,6 +605,18 @@ public partial class SaasKitContext : DbContext
             entity.Property(e => e.LeasedUntilUtc).HasColumnType("datetime");
             entity.Property(e => e.LastError).HasMaxLength(2000).IsUnicode(false);
             entity.Property(e => e.LastResponseSnippet).HasMaxLength(512).IsUnicode(false);
+        });
+
+        modelBuilder.Entity<WebhookOperationLog>(entity =>
+        {
+            entity.HasKey(e => e.OperationId);
+            entity.HasIndex(e => e.SubscriptionId);
+            entity.HasIndex(e => e.ReceivedUtc);
+
+            entity.Property(e => e.OperationId).ValueGeneratedNever();
+            entity.Property(e => e.ReceivedUtc).HasColumnType("datetime");
+            entity.Property(e => e.Action).HasMaxLength(64).IsUnicode(false);
+            entity.Property(e => e.ResultStatus).HasMaxLength(32).IsUnicode(false);
         });
 
         OnModelCreatingPartial(modelBuilder);

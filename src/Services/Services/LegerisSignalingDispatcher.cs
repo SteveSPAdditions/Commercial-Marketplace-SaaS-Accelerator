@@ -5,13 +5,13 @@ using System;
 using System.IO;
 using System.Net;
 using System.Net.Http;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Marketplace.SaaS.Accelerator.DataAccess.Entities;
 using Marketplace.SaaS.Accelerator.Services.Configurations;
 using Marketplace.SaaS.Accelerator.Services.Contracts;
+using Marketplace.SaaS.Accelerator.Services.Utilities;
 
 namespace Marketplace.SaaS.Accelerator.Services.Services;
 
@@ -45,7 +45,7 @@ public class LegerisSignalingDispatcher : IOutboxDispatcher
         }
 
         var body = entry.EventJson ?? string.Empty;
-        var signature = SignBody(body);
+        var signature = HmacSigner.ComputeSignature(body, this.config.LegerisSignalingHmacSecret);
 
         using var req = new HttpRequestMessage(HttpMethod.Post, this.config.LegerisSignalingEndpointUrl)
         {
@@ -86,14 +86,6 @@ public class LegerisSignalingDispatcher : IOutboxDispatcher
                 Error = $"IO error: {ex.Message}",
             };
         }
-    }
-
-    private string SignBody(string body)
-    {
-        var key = this.config.LegerisSignalingHmacSecret ?? string.Empty;
-        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(key));
-        var bytes = hmac.ComputeHash(Encoding.UTF8.GetBytes(body));
-        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
     private static DispatchResult ClassifyResponse(HttpStatusCode status, string snippet)

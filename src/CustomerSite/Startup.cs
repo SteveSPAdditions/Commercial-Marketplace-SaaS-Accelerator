@@ -97,6 +97,7 @@ public class Startup
             AzRegionSvcRegions = this.Configuration["SaaSApiConfiguration:AzRegionSvcRegions"],
             LegerisSignalingEndpointUrl = this.Configuration["SaaSApiConfiguration:LegerisSignalingEndpointUrl"],
             LegerisSignalingHmacSecret = this.Configuration["SaaSApiConfiguration:LegerisSignalingHmacSecret"],
+            WebhookBufferHmacSecret = this.Configuration["SaaSApiConfiguration:WebhookBufferHmacSecret"],
             AzureRegionSelectorsFallback = this.Configuration["SaaSApiConfiguration:AzureRegionSelectorsFallback"],
             RuntimeAppClientId = this.Configuration["SaaSApiConfiguration:RuntimeAppClientId"],
             MTCertPath = this.Configuration["SaaSApiConfiguration:MTCertPath"],
@@ -177,7 +178,8 @@ public class Startup
         services
             .AddTransient<IClaimsTransformation, CustomClaimsTransformation>()
             .AddScoped<ExceptionHandlerAttribute>()
-            .AddScoped<RequestLoggerActionFilter>();
+            .AddScoped<RequestLoggerActionFilter>()
+            .AddScoped<Marketplace.SaaS.Accelerator.CustomerSite.WebHook.BufferHmacFilter>();
 
         if (!Uri.TryCreate(config.FulFillmentAPIBaseURL, UriKind.Absolute, out var fulfillmentBaseApi)) 
         {
@@ -258,6 +260,7 @@ public class Startup
         services.AddScoped<ISubscriptionTenantConsentRepository, SubscriptionTenantConsentRepository>();
         services.AddScoped<ISubscriptionSiteRepository, SubscriptionSiteRepository>();
         services.AddScoped<INotificationOutboxRepository, NotificationOutboxRepository>();
+        services.AddScoped<IWebhookOperationLogRepository, WebhookOperationLogRepository>();
         services.AddScoped<SaaSClientLogger<SetupController>>();
 
         services.AddHttpClient<IAzureRegionService, AzureRegionService>(client =>

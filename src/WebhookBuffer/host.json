@@ -1,0 +1,28 @@
+{
+  "version": "2.0",
+  "logging": {
+    "applicationInsights": {
+      "samplingSettings": {
+        "isEnabled": true,
+        "maxTelemetryItemsPerSecond": 5,
+        "excludedTypes": "Exception"
+      },
+      "enableLiveMetricsFilters": true
+    },
+    "logLevel": {
+      "default": "Warning",
+      "Function": "Information",
+      "Marketplace.SaaS.Accelerator.WebhookBuffer": "Information",
+      "Host.Aggregator": "Error",
+      "Host.Results": "Warning"
+    }
+  },
+  "extensions": {
+    "serviceBus": {
+      "maxConcurrentCalls": 16,
+      "prefetchCount": 0,
+      "maxAutoLockRenewalDuration": "00:05:00",
+      "autoCompleteMessages": false
+    }
+  }
+}
