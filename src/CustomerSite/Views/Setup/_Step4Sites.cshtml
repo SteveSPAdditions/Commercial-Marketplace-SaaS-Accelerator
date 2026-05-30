@@ -85,8 +85,8 @@
 
             <form method="post" action="/Setup/@Model.AmpSubscriptionId/AddSite" class="setup-add-site mt20">
                 @Html.AntiForgeryToken()
-                <label for="sharePointSiteUrl" class="setup-input-label">SharePoint site URL</label>
                 <div class="setup-input-row">
+                    <label for="sharePointSiteUrl" class="setup-input-label">SharePoint site URL</label>
                     <input type="url" id="sharePointSiteUrl" name="sharePointSiteUrl" required
                            placeholder="https://contoso.sharepoint.com/sites/policies"
                            class="setup-input" />

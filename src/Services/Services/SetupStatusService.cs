@@ -26,8 +26,8 @@ public class SetupStatusService : ISetupStatusService
     public SetupStatusSummary GetStatus(Guid ampSubscriptionId)
     {
         var consent = this.consentRepo.GetByAmpSubscriptionId(ampSubscriptionId);
-        var hasSites = this.siteRepo.ListBySubscription(ampSubscriptionId).Any();
-        return Build(ampSubscriptionId, consent, hasSites);
+        var sites = this.siteRepo.ListBySubscription(ampSubscriptionId).ToList();
+        return Build(ampSubscriptionId, consent, sites);
     }
 
     public IDictionary<Guid, SetupStatusSummary> GetStatuses(IEnumerable<Guid> ampSubscriptionIds)
@@ -48,17 +48,24 @@ public class SetupStatusService : ISetupStatusService
     private static SetupStatusSummary Build(
         Guid ampSubscriptionId,
         DataAccess.Entities.SubscriptionTenantConsent consent,
-        bool hasSites)
+        IReadOnlyCollection<DataAccess.Entities.SubscriptionSite> sites)
     {
         var regionSelected = consent?.AzureRegion != null;
         var regionFanOut = consent?.TenantRegionsFanOutCompleteUtc.HasValue == true;
         var consented = consent?.RuntimeAppConsentedUtc.HasValue == true;
 
+        var hasSites = sites.Count > 0;
+        // The sites step counts as complete only when every enrolled site has been granted.
+        // A site still Pending, or one whose grant Failed, must leave the step -- and
+        // therefore the whole Setup -- incomplete.
+        var sitesComplete = hasSites
+            && sites.All(s => string.Equals(s.Status, "Granted", StringComparison.OrdinalIgnoreCase));
+
         // Step 1 (subscription active) is implicit when this is called.
         var completed = 1
             + (regionSelected && regionFanOut ? 1 : 0)
             + (consented ? 1 : 0)
-            + (hasSites ? 1 : 0);
+            + (sitesComplete ? 1 : 0);
 
         return new SetupStatusSummary
         {

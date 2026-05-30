@@ -151,12 +151,27 @@ public class SetupController : BaseController
             GrantedByUpn = consent?.ConsentedByUpn,
         };
 
-        // Step 4 gating: region fan-out complete + consent done
+        // Step 4 gating: region fan-out complete + consent done. Once unlocked, the step is
+        // Complete only when every enrolled site has been granted; a Pending or Failed site
+        // keeps it InProgress (the failed row stays actionable via its Grant button).
         var step4Unlocked = consent?.TenantRegionsFanOutCompleteUtc.HasValue == true
                           && consent?.RuntimeAppConsentedUtc.HasValue == true;
-        vm.Step4 = step4Unlocked
-            ? (sites.Any() ? StepState.InProgress : StepState.NotStarted)
-            : StepState.Locked;
+        if (!step4Unlocked)
+        {
+            vm.Step4 = StepState.Locked;
+        }
+        else if (!sites.Any())
+        {
+            vm.Step4 = StepState.NotStarted;
+        }
+        else if (sites.All(s => string.Equals(s.Status, "Granted", StringComparison.OrdinalIgnoreCase)))
+        {
+            vm.Step4 = StepState.Complete;
+        }
+        else
+        {
+            vm.Step4 = StepState.InProgress;
+        }
 
         vm.Sites = sites.Select(s => new SiteRowViewModel
         {
@@ -362,7 +377,45 @@ public class SetupController : BaseController
 
     [HttpPost("/Setup/{subscriptionId:guid}/AddSite")]
     [ValidateAntiForgeryToken]
-    public IActionResult AddSite(Guid subscriptionId, string sharePointSiteUrl)
+    public Task<IActionResult> AddSite(Guid subscriptionId, string sharePointSiteUrl, CancellationToken ct)
+        => this.RunAddSiteOrChallengeAsync(subscriptionId, sharePointSiteUrl, ct);
+
+    /// <summary>
+    /// POST wrapper for AddSite. Validating the URL against Graph needs a delegated token; if
+    /// it can't be acquired silently the core throws <see cref="MicrosoftIdentityWebChallengeUserException"/>,
+    /// which we hand off to the GET <see cref="ResumeAddSite"/> action for interactive consent
+    /// (the entered URL is carried through on the query string), mirroring the grant flow.
+    /// </summary>
+    private async Task<IActionResult> RunAddSiteOrChallengeAsync(Guid subscriptionId, string sharePointSiteUrl, CancellationToken ct)
+    {
+        try
+        {
+            return await this.AddSiteCoreAsync(subscriptionId, sharePointSiteUrl, ct).ConfigureAwait(false);
+        }
+        catch (MicrosoftIdentityWebChallengeUserException)
+        {
+            return this.RedirectToAction(nameof(ResumeAddSite), new { subscriptionId, sharePointSiteUrl });
+        }
+    }
+
+    /// <summary>
+    /// Post-interactive-consent resume target for AddSite. Reached only via redirect from
+    /// <see cref="RunAddSiteOrChallengeAsync"/>; [AuthorizeForScopes] drives the sign-in and
+    /// returns the user here with the site URL intact, by which point the delegated token is
+    /// cached and validation can complete.
+    /// </summary>
+    [HttpGet("/Setup/{subscriptionId:guid}/AddSite/Resume")]
+    [AuthorizeForScopes(Scopes = new[] { "https://graph.microsoft.com/Sites.FullControl.All" })]
+    public Task<IActionResult> ResumeAddSite(Guid subscriptionId, string sharePointSiteUrl, CancellationToken ct)
+        => this.AddSiteCoreAsync(subscriptionId, sharePointSiteUrl, ct);
+
+    /// <summary>
+    /// Validates the supplied URL against Microsoft Graph and, only if the site actually
+    /// exists, enrolls it -- storing the resolved Graph site id so the later Grant step
+    /// doesn't have to resolve it again. A URL that doesn't resolve is rejected with an error
+    /// and no row is created.
+    /// </summary>
+    private async Task<IActionResult> AddSiteCoreAsync(Guid subscriptionId, string sharePointSiteUrl, CancellationToken ct)
     {
         if (!this.User.Identity.IsAuthenticated)
         {
@@ -402,36 +455,120 @@ public class SetupController : BaseController
             return this.RedirectToAction(nameof(Index), new { subscriptionId });
         }
 
+        // Delegated Graph token to verify the site exists. A silent-acquisition failure throws
+        // MicrosoftIdentityWebChallengeUserException, which we let propagate so the POST wrapper /
+        // resume action can prompt for interactive consent; other token errors are non-fatal here.
+        string token;
+        try
+        {
+            token = await this.tokenAcquisition
+                .GetAccessTokenForUserAsync(SitePermissionScopes)
+                .ConfigureAwait(false);
+        }
+        catch (MicrosoftIdentityWebChallengeUserException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogError(HttpUtility.HtmlEncode($"AddSite token acquisition failed for {subscriptionId}: {ex.Message}"));
+            this.TempData["FlashMessage"] = "Couldn't verify the site right now. Please try again.";
+            this.TempData["FlashIsError"] = true;
+            return this.RedirectToAction(nameof(Index), new { subscriptionId });
+        }
+
+        // Resolve the URL to a Graph site id. A non-existent site 404s here -> reject without
+        // creating a row, so only real sites get enrolled.
+        string graphSiteId;
+        try
+        {
+            graphSiteId = await this.sitePermissionService
+                .ResolveGraphSiteIdAsync(canonicalUrl, token, ct)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogError(HttpUtility.HtmlEncode($"AddSite site lookup failed for {subscriptionId} {canonicalUrl}: {ex.Message}"));
+            this.TempData["FlashMessage"] = $"Couldn't find a SharePoint site at '{canonicalUrl}'. Check the URL and try again.";
+            this.TempData["FlashIsError"] = true;
+            return this.RedirectToAction(nameof(Index), new { subscriptionId });
+        }
+
         var site = new Marketplace.SaaS.Accelerator.DataAccess.Entities.SubscriptionSite
         {
             AmpSubscriptionId = subscriptionId,
             SharePointSiteUrl = canonicalUrl,
+            GraphSiteId = graphSiteId,
             Status = "Pending",
             CreatedUtc = DateTime.UtcNow,
         };
         this.siteRepo.Save(site);
 
         this.logger.Info(HttpUtility.HtmlEncode($"Setup site enrolled: {subscriptionId} {canonicalUrl} by {this.CurrentUserEmailAddress}"));
-        this.TempData["FlashMessage"] = $"Site '{canonicalUrl}' enrolled and queued for permission grant.";
+        this.TempData["FlashMessage"] = $"Site '{canonicalUrl}' verified and enrolled. Click Grant access to grant permissions.";
         return this.RedirectToAction(nameof(Index), new { subscriptionId });
     }
 
     [HttpPost("/Setup/{subscriptionId:guid}/Sites/{siteId:int}/Grant")]
     [ValidateAntiForgeryToken]
     public Task<IActionResult> GrantSiteAccess(Guid subscriptionId, int siteId, CancellationToken ct)
-        => this.TransitionSiteRoleAsync(subscriptionId, siteId, SiteTransition.Grant, ct);
+        => this.RunTransitionOrChallengeAsync(subscriptionId, siteId, SiteTransition.Grant, ct);
 
     [HttpPost("/Setup/{subscriptionId:guid}/Sites/{siteId:int}/SwitchToRead")]
     [ValidateAntiForgeryToken]
     public Task<IActionResult> SwitchSiteToRead(Guid subscriptionId, int siteId, CancellationToken ct)
-        => this.TransitionSiteRoleAsync(subscriptionId, siteId, SiteTransition.SwitchToRead, ct);
+        => this.RunTransitionOrChallengeAsync(subscriptionId, siteId, SiteTransition.SwitchToRead, ct);
 
     [HttpPost("/Setup/{subscriptionId:guid}/Sites/{siteId:int}/SwitchToManage")]
     [ValidateAntiForgeryToken]
     public Task<IActionResult> SwitchSiteToManage(Guid subscriptionId, int siteId, CancellationToken ct)
-        => this.TransitionSiteRoleAsync(subscriptionId, siteId, SiteTransition.SwitchToManage, ct);
+        => this.RunTransitionOrChallengeAsync(subscriptionId, siteId, SiteTransition.SwitchToManage, ct);
 
     private enum SiteTransition { Grant, SwitchToRead, SwitchToManage }
+
+    /// <summary>
+    /// POST entry-point wrapper for the three site role transitions. Runs the transition;
+    /// if acquiring the delegated Graph token requires interactive sign-in (the user's
+    /// token isn't in cache -- e.g. after an app recycle, a new session, or because
+    /// Sites.FullControl.All was never delegated-consented), Microsoft.Identity.Web throws
+    /// <see cref="MicrosoftIdentityWebChallengeUserException"/>. A POST route can't be the
+    /// post-sign-in redirect target (the return leg from the identity provider is always a
+    /// GET), so we hand off to the GET <see cref="ResumeSiteTransition"/> action, which is
+    /// decorated with [AuthorizeForScopes] and drives the interactive consent.
+    /// </summary>
+    private async Task<IActionResult> RunTransitionOrChallengeAsync(Guid subscriptionId, int siteId, SiteTransition transition, CancellationToken ct)
+    {
+        try
+        {
+            return await this.TransitionSiteRoleAsync(subscriptionId, siteId, transition, ct).ConfigureAwait(false);
+        }
+        catch (MicrosoftIdentityWebChallengeUserException)
+        {
+            return this.RedirectToAction(nameof(ResumeSiteTransition), new { subscriptionId, siteId, transition = transition.ToString() });
+        }
+    }
+
+    /// <summary>
+    /// Post-interactive-consent resume target for a site role transition. Reached only via
+    /// redirect from <see cref="RunTransitionOrChallengeAsync"/> when the delegated token
+    /// could not be acquired silently. [AuthorizeForScopes] catches the
+    /// <see cref="MicrosoftIdentityWebChallengeUserException"/> that the transition throws,
+    /// performs the interactive sign-in for Sites.FullControl.All, and redirects the user
+    /// back here -- by which point the delegated token is cached and the transition runs to
+    /// completion. Access is still gated by the purchaser-email ownership check inside the
+    /// transition, so the GET (no antiforgery token) cannot grant access to an arbitrary site.
+    /// </summary>
+    [HttpGet("/Setup/{subscriptionId:guid}/Sites/{siteId:int}/Resume")]
+    [AuthorizeForScopes(Scopes = new[] { "https://graph.microsoft.com/Sites.FullControl.All" })]
+    public Task<IActionResult> ResumeSiteTransition(Guid subscriptionId, int siteId, string transition, CancellationToken ct)
+    {
+        if (!Enum.TryParse<SiteTransition>(transition, ignoreCase: true, out var parsed))
+        {
+            return Task.FromResult<IActionResult>(this.RedirectToAction(nameof(Index), new { subscriptionId }));
+        }
+
+        return this.TransitionSiteRoleAsync(subscriptionId, siteId, parsed, ct);
+    }
 
     /// <summary>
     /// Common path for Grant / SwitchToRead / SwitchToManage. Acquires a Graph access
@@ -464,10 +601,13 @@ public class SetupController : BaseController
         try
         {
             // Delegated Graph token in the signed-in user's tenant. Microsoft.Identity.Web
-            // caches the token from sign-in and silently refreshes when needed. If the user
-            // hasn't consented to Sites.FullControl.All (or did once but a new permission has
-            // since been added), this throws MsalUiRequiredException -- we surface that as a
-            // re-consent prompt rather than a generic failure.
+            // caches the token from sign-in and silently refreshes when needed. If it can't
+            // be acquired silently (cache empty after an app recycle / new session, or
+            // Sites.FullControl.All not yet delegated-consented), this throws
+            // MicrosoftIdentityWebChallengeUserException. That case is caught below and
+            // re-thrown unchanged so the caller can drive an interactive consent prompt --
+            // we must NOT mark the site row Failed for it, because the Graph state is fine;
+            // it's the user's token that needs refreshing.
             var token = await this.tokenAcquisition
                 .GetAccessTokenForUserAsync(SitePermissionScopes)
                 .ConfigureAwait(false);
@@ -521,6 +661,13 @@ public class SetupController : BaseController
             this.TempData["FlashMessage"] = transition == SiteTransition.SwitchToRead
                 ? $"Site '{site.SharePointSiteUrl}' is now set to Read."
                 : $"Site '{site.SharePointSiteUrl}' is now set to Manage.";
+        }
+        catch (MicrosoftIdentityWebChallengeUserException)
+        {
+            // The delegated token needs an interactive sign-in. Propagate so the POST
+            // wrapper / [AuthorizeForScopes] resume action can prompt the user. The Graph
+            // state is unchanged, so leave the site row as-is (do NOT mark it Failed).
+            throw;
         }
         catch (Exception ex)
         {

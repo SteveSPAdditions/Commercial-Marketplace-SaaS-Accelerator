@@ -147,14 +147,16 @@
 }
 
 .setup-add-site .setup-input-label {
-    display: block;
-    margin-bottom: 0.5rem;
+    flex: 0 0 auto;
+    margin-bottom: 0;
+    white-space: nowrap;
     font-weight: 500;
     color: #374151;
 }
 
 .setup-input-row {
     display: flex;
+    align-items: center;
     gap: 0.5rem;
 }
 
