@@ -377,7 +377,7 @@ VALUES
 	('ApplicationName','Contoso','Application Name'),
 	('IsEmailEnabledForSubscriptionActivation','true','Active Email Enabled'),
 	('IsEmailEnabledForUnsubscription','true','Unsubscribe Email Enabled'),
-	('IsAutomaticProvisioningSupported','false','Skip Activation - Automatic Provisioning Supported'),
+	('IsAutomaticProvisioningSupported','true','Skip Activation - Automatic Provisioning Supported'),
 	('IsEmailEnabledForPendingActivation','false','Email Enabled For Pending Activation')
 ");
             
