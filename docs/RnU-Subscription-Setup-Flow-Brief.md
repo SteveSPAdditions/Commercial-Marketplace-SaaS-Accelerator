@@ -79,8 +79,11 @@ The wizard is a gated checklist: each step unlocks the next. Progress and comple
   - The chosen region (e.g. `eastus`, `westeurope`), who selected it, and when, are persisted against the subscription.
   - A **regional fan-out** is enqueued so downstream regional services are provisioned/notified for that tenant. This is asynchronous.
   - The wizard **polls for completion** and updates the UI when fan-out finishes (with slow/stuck warnings on long-running fan-outs).
+- **Creates the provider-routing record (key signal for `appaddin2`):** Selecting the region creates a row in the **`tenantregions`** table with **`SubscriptionProvider = MarketplaceSaaS`**. This row is the **trigger for `appaddin2` to bypass the ZoHo Billing flows** and treat the tenant as a Marketplace SaaS subscription instead. A tenant without this row (or with a non-`MarketplaceSaaS` provider) continues down the existing ZoHo path.
 - **How it completes:** Region selected **AND** fan-out reported complete.
 - **Gates:** Unlocks Step 3. (Region must be chosen before consent so the consent/runtime app operate in the correct region.)
+
+> **Note:** The new Marketplace-SaaS-routed flows in `appaddin2` (what it does once `SubscriptionProvider = MarketplaceSaaS` is detected) will be built out in **phases under a separate brief**. This document only establishes that the `tenantregions` row with `SubscriptionProvider = MarketplaceSaaS` is the routing trigger.
 
 ### Step 3 — Grant enterprise application permissions (admin consent)
 
@@ -121,10 +124,12 @@ This step uses the **`Sites.Selected`** model so Read & Understood only ever has
 
 `appaddin2` is the **verification gate**. It does not perform any of the four steps; it reads the state they produce and refuses to proceed until all four are complete for the subscription/tenant in question.
 
+**Provider routing (precondition).** Before any of the four checks apply, `appaddin2` keys off the **`tenantregions`** row written in Step 2: if **`SubscriptionProvider = MarketplaceSaaS`**, the tenant is routed down the new Marketplace SaaS flows and **bypasses the ZoHo Billing flows**. Absence of this row (or a non-`MarketplaceSaaS` provider) means the tenant stays on the existing ZoHo path. *(The detailed Marketplace-SaaS flows are a separate, phased brief.)*
+
 **The four completion signals `appaddin2` checks** (per subscription):
 
 1. **Subscription active** — subscription is `Subscribed` (reached via the customer's self-service Activate click; no operator gate).
-2. **Region selected** — a region is recorded **and** the regional fan-out is complete.
+2. **Region selected** — a region is recorded **and** the regional fan-out is complete; the `tenantregions` row exists with `SubscriptionProvider = MarketplaceSaaS`.
 3. **Admin consent granted** — the runtime enterprise app has tenant admin consent recorded.
 4. **Site(s) granted** — at least one SharePoint site is enrolled and in **Granted** status under `Sites.Selected`.
 
