@@ -1,5 +1,11 @@
 # Outbox / Legeris Signaling — Architecture
 
+> **⚠️ Superseded for region fan-out (2026-06-13).** The **async transactional-outbox** path described below is **no longer used** for tenant-region propagation — nothing enqueues `TenantRegionFanOut` rows any more, so `OutboxDrainService` is dormant. Region propagation now works two ways:
+> 1. **Detected region** → region is persisted and marked complete immediately; the regional `tenantregions` rows are propagated by the **external Legeris daily `SaaSInitialiseTenantRegions` reconcile job**, which *pulls* a snapshot from `ReconcileController` (`GET /api/saasaccelerator/reconcile-snapshot`). No push from this repo.
+> 2. **Manually selected region** → `AzureRegionService.SaveRegionAndFanOutAsync` does a **synchronous immediate push** by calling `IOutboxDispatcher` directly (reusing the HMAC/HTTP dispatch below) and waiting — it does **not** persist an outbox row or use the drain.
+>
+> The HMAC signing + dispatch + receiver wire-protocol sections are still accurate for the synchronous push and as reference for any future event types. The **outbox table / drain / retry / dead-letter** sections are retained for history but are not on the live region path. See [RnU-Subscription-Setup-Flow-Brief.md](RnU-Subscription-Setup-Flow-Brief.md) §Step 2 for the current model.
+
 Reference for the post-acceptance signaling path that pushes Marketplace-SaaS-side state changes (today: tenant-region assignment) into the Legeris EUSA service for cross-region fan-out.
 
 > Scope: producers in this repo + the receiver in [Legeris.Office365.ServiceInterface](D:/VSTFSWork/Legeris%20for%20SharePoint/Legeris.Office365.ServiceInterface/Azure/SaasAcceleratorEventHandler.cs). End-to-end wire protocol, failure modes, and every App Service / web.config setting on both sides.
