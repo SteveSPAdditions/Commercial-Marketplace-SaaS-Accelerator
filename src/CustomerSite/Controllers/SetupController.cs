@@ -68,6 +68,61 @@ public class SetupController : BaseController
         this.logger = logger;
     }
 
+    /// <summary>
+    /// Signed-in user's home tenant id (the 'tid' claim), or <see cref="Guid.Empty"/> if absent.
+    /// </summary>
+    private Guid CurrentUserTenantId
+    {
+        get
+        {
+            var tid = this.User?.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid")?.Value
+                ?? this.User?.FindFirst("tid")?.Value;
+            return Guid.TryParse(tid, out var t) ? t : Guid.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Loads the subscription and authorizes the signed-in user against it. Access is granted to
+    /// any user in the SAME TENANT as the subscription (<c>PurchaserTenantId</c>): the person who
+    /// completes Setup (a tenant admin arriving from Azure -> SaaS) is frequently NOT the
+    /// individual who purchased, so we authorize by tenant rather than by purchaser email.
+    /// Returns false when the subscription is missing or belongs to a different tenant; the
+    /// denial is logged. <paramref name="subscription"/> may be null on a false return.
+    /// </summary>
+    private bool TryAuthorizeSetup(Guid subscriptionId, out Marketplace.SaaS.Accelerator.DataAccess.Entities.Subscriptions subscription)
+    {
+        subscription = this.subscriptionRepo.GetById(subscriptionId);
+        if (subscription == null)
+        {
+            this.logger.LogError(HttpUtility.HtmlEncode(
+                $"Setup access denied: subscription {subscriptionId} not found (user {this.CurrentUserEmailAddress})"));
+            return false;
+        }
+
+        var userTenantId = this.CurrentUserTenantId;
+        if (userTenantId == Guid.Empty
+            || subscription.PurchaserTenantId == null
+            || subscription.PurchaserTenantId.Value != userTenantId)
+        {
+            this.logger.LogError(HttpUtility.HtmlEncode(
+                $"Setup access denied for {subscriptionId}: user tenant '{userTenantId}' != subscription tenant '{subscription.PurchaserTenantId}' (user {this.CurrentUserEmailAddress})"));
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Standard response when the signed-in user is not authorized for a subscription's setup:
+    /// surfaces a message on the subscriptions list (which reads TempData["ErrorMsg"]) and
+    /// redirects there, rather than silently bouncing to the landing page.
+    /// </summary>
+    private IActionResult SetupAccessDenied()
+    {
+        this.TempData["ErrorMsg"] = "You don't have access to that subscription's setup. It must be completed by a user signed in to the same Microsoft Entra tenant as the subscription.";
+        return this.RedirectToAction("Subscriptions", "Home");
+    }
+
     [HttpGet("/Setup/{subscriptionId:guid}")]
     public async Task<IActionResult> Index(Guid subscriptionId, CancellationToken ct)
     {
@@ -76,12 +131,9 @@ public class SetupController : BaseController
             return this.RedirectToAction("Index", "Home");
         }
 
-        var subscription = this.subscriptionRepo.GetById(subscriptionId);
-        if (subscription == null
-            || !string.Equals(subscription.PurchaserEmail, this.CurrentUserEmailAddress, StringComparison.OrdinalIgnoreCase))
+        if (!this.TryAuthorizeSetup(subscriptionId, out var subscription))
         {
-            this.logger.LogError(HttpUtility.HtmlEncode($"Setup access denied for {subscriptionId} by {this.CurrentUserEmailAddress}"));
-            return this.RedirectToAction("Index", "Home");
+            return this.SetupAccessDenied();
         }
 
         var tenantId = subscription.PurchaserTenantId ?? Guid.Empty;
@@ -209,11 +261,9 @@ public class SetupController : BaseController
             return this.RedirectToAction("Index", "Home");
         }
 
-        var subscription = this.subscriptionRepo.GetById(subscriptionId);
-        if (subscription == null
-            || !string.Equals(subscription.PurchaserEmail, this.CurrentUserEmailAddress, StringComparison.OrdinalIgnoreCase))
+        if (!this.TryAuthorizeSetup(subscriptionId, out var subscription))
         {
-            return this.RedirectToAction("Index", "Home");
+            return this.SetupAccessDenied();
         }
 
         if (string.IsNullOrWhiteSpace(azureRegion))
@@ -269,11 +319,9 @@ public class SetupController : BaseController
             return this.RedirectToAction("Index", "Home");
         }
 
-        var subscription = this.subscriptionRepo.GetById(subscriptionId);
-        if (subscription == null
-            || !string.Equals(subscription.PurchaserEmail, this.CurrentUserEmailAddress, StringComparison.OrdinalIgnoreCase))
+        if (!this.TryAuthorizeSetup(subscriptionId, out var subscription))
         {
-            return this.RedirectToAction("Index", "Home");
+            return this.SetupAccessDenied();
         }
 
         var tenantId = subscription.PurchaserTenantId ?? Guid.Empty;
@@ -357,9 +405,7 @@ public class SetupController : BaseController
             return this.Unauthorized();
         }
 
-        var subscription = this.subscriptionRepo.GetById(subscriptionId);
-        if (subscription == null
-            || !string.Equals(subscription.PurchaserEmail, this.CurrentUserEmailAddress, StringComparison.OrdinalIgnoreCase))
+        if (!this.TryAuthorizeSetup(subscriptionId, out _))
         {
             return this.NotFound();
         }
@@ -428,11 +474,9 @@ public class SetupController : BaseController
             return this.RedirectToAction("Index", "Home");
         }
 
-        var subscription = this.subscriptionRepo.GetById(subscriptionId);
-        if (subscription == null
-            || !string.Equals(subscription.PurchaserEmail, this.CurrentUserEmailAddress, StringComparison.OrdinalIgnoreCase))
+        if (!this.TryAuthorizeSetup(subscriptionId, out _))
         {
-            return this.RedirectToAction("Index", "Home");
+            return this.SetupAccessDenied();
         }
 
         if (string.IsNullOrWhiteSpace(sharePointSiteUrl))
@@ -589,11 +633,9 @@ public class SetupController : BaseController
             return this.RedirectToAction("Index", "Home");
         }
 
-        var subscription = this.subscriptionRepo.GetById(subscriptionId);
-        if (subscription == null
-            || !string.Equals(subscription.PurchaserEmail, this.CurrentUserEmailAddress, StringComparison.OrdinalIgnoreCase))
+        if (!this.TryAuthorizeSetup(subscriptionId, out _))
         {
-            return this.RedirectToAction("Index", "Home");
+            return this.SetupAccessDenied();
         }
 
         var site = this.siteRepo.Get(siteId);
