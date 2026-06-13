@@ -54,16 +54,6 @@
                 </p>
             }
         }
-        else if (picker.Mode == "detected")
-        {
-            <p class="setup-step__meta">
-                Detected from your tenant's existing presence: <strong>@picker.SelectedRegionFriendly</strong>
-            </p>
-            <form method="post" asp-controller="Setup" asp-action="Region" asp-route-subscriptionId="@Model.AmpSubscriptionId" class="setup-region-form">
-                <input type="hidden" name="azureRegion" value="@picker.SelectedRegion" />
-                <button type="submit" class="cm-button-default">Confirm region</button>
-            </form>
-        }
         else
         {
             @if (picker.Mode == "fallback")

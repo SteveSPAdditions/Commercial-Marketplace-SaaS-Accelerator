@@ -28,22 +28,19 @@ public class AzureRegionService : IAzureRegionService
 {
     private readonly HttpClient httpClient;
     private readonly SaaSApiClientConfiguration config;
-    private readonly SaasKitContext context;
     private readonly ISubscriptionTenantConsentRepository consentRepo;
-    private readonly INotificationOutboxRepository outboxRepo;
+    private readonly IOutboxDispatcher dispatcher;
 
     public AzureRegionService(
         HttpClient httpClient,
         SaaSApiClientConfiguration config,
-        SaasKitContext context,
         ISubscriptionTenantConsentRepository consentRepo,
-        INotificationOutboxRepository outboxRepo)
+        IOutboxDispatcher dispatcher)
     {
         this.httpClient = httpClient;
         this.config = config;
-        this.context = context;
         this.consentRepo = consentRepo;
-        this.outboxRepo = outboxRepo;
+        this.dispatcher = dispatcher;
     }
 
     public async Task<TenantRegionInfo> GetTenantRegionAsync(Guid tenantId, CancellationToken ct)
@@ -159,7 +156,7 @@ public class AzureRegionService : IAzureRegionService
         }
     }
 
-    public async Task SaveRegionAndEnqueueFanOutAsync(
+    public Task SaveRegionAsync(
         Guid ampSubscriptionId,
         Guid tenantId,
         string azureRegion,
@@ -171,67 +168,106 @@ public class AzureRegionService : IAzureRegionService
             throw new ArgumentException("azureRegion is required", nameof(azureRegion));
         }
 
-        IDbContextTransaction tx = null;
+        var consent = this.consentRepo.GetByAmpSubscriptionId(ampSubscriptionId)
+                      ?? new SubscriptionTenantConsent
+                      {
+                          AmpSubscriptionId = ampSubscriptionId,
+                          TenantId = tenantId,
+                      };
+
+        var now = DateTime.UtcNow;
+        consent.TenantId = tenantId;
+        consent.AzureRegion = azureRegion;
+        consent.AzureRegionSelectedUtc = now;
+        consent.AzureRegionSelectedByUpn = actorUpn;
+
+        // Detected region: resolving IS the fan-out completion. The daily ratification (reconcile)
+        // job is the authority that propagates the TenantRegions row (SubscriptionProvider =
+        // MarketplaceSaaS) into every regional database, so we do NOT synchronously call the
+        // signaling endpoint here. By the time the installer returns to add sites the daily job
+        // will have created the regional rows; marking complete now lets Setup proceed immediately.
+        consent.TenantRegionsFanOutCompleteUtc = now;
+        consent.FanOutFailureRegions = null;
+        this.consentRepo.Save(consent);
+
+        return Task.CompletedTask;
+    }
+
+    public async Task<bool> SaveRegionAndFanOutAsync(
+        Guid ampSubscriptionId,
+        Guid tenantId,
+        string azureRegion,
+        string actorUpn,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(azureRegion))
+        {
+            throw new ArgumentException("azureRegion is required", nameof(azureRegion));
+        }
+
+        var consent = this.consentRepo.GetByAmpSubscriptionId(ampSubscriptionId)
+                      ?? new SubscriptionTenantConsent
+                      {
+                          AmpSubscriptionId = ampSubscriptionId,
+                          TenantId = tenantId,
+                      };
+
+        var now = DateTime.UtcNow;
+        consent.TenantId = tenantId;
+        consent.AzureRegion = azureRegion;
+        consent.AzureRegionSelectedUtc = now;
+        consent.AzureRegionSelectedByUpn = actorUpn;
+        // A manually selected region is brand new to the regions, so it is NOT complete until the
+        // push is confirmed below. The daily ratification can't be relied on to unblock the
+        // installer here (it runs once a day and never marks this row complete).
+        consent.TenantRegionsFanOutCompleteUtc = null;
+        consent.FanOutFailureRegions = null;
+        this.consentRepo.Save(consent);
+
+        // Immediate push: call the fan-out (signaling) endpoint synchronously and wait. Only a
+        // confirmed delivery marks the step complete; otherwise the caller surfaces a retry.
+        var payload = new
+        {
+            eventType = "TenantRegionFanOut",
+            saasSubscriptionId = ampSubscriptionId,
+            assignedTenantId = tenantId,
+            azureRegion,
+            modifiedUtc = now,
+            occurredBy = "Accelerator",
+            actorUpn,
+        };
+        var entry = new NotificationOutbox
+        {
+            EventType = "TenantRegionFanOut",
+            EventJson = JsonSerializer.Serialize(payload),
+            AmpSubscriptionId = ampSubscriptionId,
+            IdempotencyKey = $"TenantRegionFanOut|{ampSubscriptionId:N}|{azureRegion}|{now:O}",
+            CreatedUtc = now,
+            NextAttemptUtc = now,
+        };
+
+        DispatchResult result;
         try
         {
-            tx = await this.context.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+            result = await this.dispatcher.TryDispatchAsync(entry, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            result = new DispatchResult { Outcome = DispatchOutcome.Transient, Error = $"{ex.GetType().Name}: {ex.Message}" };
+        }
 
-            var consent = this.consentRepo.GetByAmpSubscriptionId(ampSubscriptionId)
-                          ?? new SubscriptionTenantConsent
-                          {
-                              AmpSubscriptionId = ampSubscriptionId,
-                              TenantId = tenantId,
-                          };
-
-            consent.TenantId = tenantId;
-            consent.AzureRegion = azureRegion;
-            consent.AzureRegionSelectedUtc = DateTime.UtcNow;
-            consent.AzureRegionSelectedByUpn = actorUpn;
-            // Reset any prior fan-out completion since we're (re)issuing a fan-out event.
-            consent.TenantRegionsFanOutCompleteUtc = null;
+        if (result.Outcome == DispatchOutcome.Delivered)
+        {
+            consent.TenantRegionsFanOutCompleteUtc = DateTime.UtcNow;
             consent.FanOutFailureRegions = null;
             this.consentRepo.Save(consent);
+            return true;
+        }
 
-            var idempotencyKey = $"TenantRegionFanOut|{ampSubscriptionId:N}|{azureRegion}|{consent.AzureRegionSelectedUtc.Value:O}";
-            if (this.outboxRepo.GetByIdempotencyKey(idempotencyKey) == null)
-            {
-                var payload = new
-                {
-                    eventType = "TenantRegionFanOut",
-                    saasSubscriptionId = ampSubscriptionId,
-                    assignedTenantId = tenantId,
-                    azureRegion,
-                    modifiedUtc = consent.AzureRegionSelectedUtc.Value,
-                    occurredBy = "Accelerator",
-                    actorUpn,
-                };
-                var entry = new NotificationOutbox
-                {
-                    EventType = "TenantRegionFanOut",
-                    EventJson = JsonSerializer.Serialize(payload),
-                    AmpSubscriptionId = ampSubscriptionId,
-                    IdempotencyKey = idempotencyKey,
-                    CreatedUtc = DateTime.UtcNow,
-                    NextAttemptUtc = DateTime.UtcNow,
-                };
-                this.outboxRepo.Enqueue(entry);
-                await this.context.SaveChangesAsync(ct).ConfigureAwait(false);
-            }
-
-            await tx.CommitAsync(ct).ConfigureAwait(false);
-        }
-        catch
-        {
-            if (tx != null)
-            {
-                await tx.RollbackAsync(ct).ConfigureAwait(false);
-            }
-            throw;
-        }
-        finally
-        {
-            tx?.Dispose();
-        }
+        // Not delivered: leave the region selected (so a retry re-uses it) but not complete.
+        consent.FanOutFailureRegions = result.Error;
+        this.consentRepo.Save(consent);
+        return false;
     }
 
     private TenantRegionInfo FallbackResponse(string error)

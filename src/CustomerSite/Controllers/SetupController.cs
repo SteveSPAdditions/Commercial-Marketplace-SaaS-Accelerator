@@ -149,7 +149,74 @@ public class SetupController : BaseController
             Step1 = StepState.Complete,
         };
 
-        // Step 2: region
+        // Step 2: region. ALWAYS query Function1 -- it is the authority for a tenant's region; we
+        // never short-circuit on a stored AzureRegion. A positively detected region is (re)applied
+        // and marked complete on every load, which self-heals any stale or incomplete row. The
+        // stored region is used only as a fallback to remember a MANUAL selection that Function1
+        // cannot detect; if there's neither a detection nor a prior selection, we show the picker.
+        if (tenantId != Guid.Empty)
+        {
+            var lookup = await this.regionService.GetTenantRegionAsync(tenantId, ct).ConfigureAwait(false);
+            // A positively detected region is used as-is, even if it isn't in the customer-facing
+            // selector list (e.g. an internal/dev region): detection wins over the offered list.
+            var detected = !lookup.IsFallback
+                && !string.IsNullOrEmpty(lookup.AzRegion)
+                && lookup.AzRegion != "?";
+
+            if (detected)
+            {
+                var storedRegion = consent?.AzureRegion;
+                var matches = string.Equals(storedRegion, lookup.AzRegion, StringComparison.OrdinalIgnoreCase);
+
+                // The stored region is never authoritative -- it's just what was picked or last
+                // returned. When Function1 disagrees with it, log the discrepancy before we
+                // overwrite the AMP DB with Function1's answer.
+                if (storedRegion != null && !matches)
+                {
+                    this.logger.Warn(HttpUtility.HtmlEncode(
+                        $"Function1 region '{lookup.AzRegion}' differs from stored '{storedRegion}' for subscription {subscriptionId} (tenant {tenantId}); updating AMP DB to Function1."));
+                }
+
+                // Persist + complete only when the stored row doesn't already match and isn't
+                // already complete (avoids a write on every page load).
+                if (storedRegion == null || !matches || !consent.TenantRegionsFanOutCompleteUtc.HasValue)
+                {
+                    try
+                    {
+                        await this.regionService.SaveRegionAsync(
+                            subscriptionId, tenantId, lookup.AzRegion, this.CurrentUserEmailAddress, ct).ConfigureAwait(false);
+                        consent = this.consentRepo.GetByAmpSubscriptionId(subscriptionId);
+                    }
+                    catch (Exception ex)
+                    {
+                        this.logger.LogError(HttpUtility.HtmlEncode(
+                            $"Auto-complete of detected region '{lookup.AzRegion}' failed for {subscriptionId}: {ex.Message}"));
+                    }
+                }
+            }
+            else if (consent?.AzureRegion == null)
+            {
+                // Function1 can't identify the region and none was previously selected -> manual pick.
+                vm.Step2 = StepState.NotStarted;
+                vm.RegionPicker = new RegionPickerViewModel
+                {
+                    Mode = lookup.IsFallback ? "fallback" : "picker",
+                    Selectors = lookup.AzureRegionSelectors ?? new(),
+                    ErrorMessage = lookup.Error,
+                };
+            }
+            // else: not detected but a region was previously selected -> fall through to "saved".
+        }
+        else if (consent?.AzureRegion == null)
+        {
+            vm.Step2 = StepState.NotStarted;
+            vm.RegionPicker = new RegionPickerViewModel
+            {
+                Mode = "fallback",
+                ErrorMessage = "Subscription has no purchaser tenant id; cannot query Function1.",
+            };
+        }
+
         if (consent?.AzureRegion != null)
         {
             vm.Step2 = consent.TenantRegionsFanOutCompleteUtc.HasValue ? StepState.Complete : StepState.InProgress;
@@ -162,34 +229,6 @@ public class SetupController : BaseController
                 SelectedUtc = consent.AzureRegionSelectedUtc,
                 SelectedByUpn = consent.AzureRegionSelectedByUpn,
             };
-        }
-        else
-        {
-            vm.Step2 = StepState.NotStarted;
-            if (tenantId != Guid.Empty)
-            {
-                var lookup = await this.regionService.GetTenantRegionAsync(tenantId, ct).ConfigureAwait(false);
-                vm.RegionPicker = new RegionPickerViewModel
-                {
-                    Mode = lookup.IsFallback
-                        ? "fallback"
-                        : (lookup.AzRegion != null && lookup.AzRegion != "?" ? "detected" : "picker"),
-                    SelectedRegion = lookup.AzRegion != "?" ? lookup.AzRegion : null,
-                    SelectedRegionFriendly = lookup.AzureRegionSelectors
-                        ?.FirstOrDefault(s => s.Key == lookup.AzRegion)?.Text
-                        ?? lookup.AzRegion,
-                    Selectors = lookup.AzureRegionSelectors ?? new(),
-                    ErrorMessage = lookup.Error,
-                };
-            }
-            else
-            {
-                vm.RegionPicker = new RegionPickerViewModel
-                {
-                    Mode = "fallback",
-                    ErrorMessage = "Subscription has no purchaser tenant id; cannot query Function1.",
-                };
-            }
         }
 
         // Step 3 gating: region row persisted (fan-out in flight is OK)
@@ -293,13 +332,24 @@ public class SetupController : BaseController
 
         try
         {
-            await this.regionService.SaveRegionAndEnqueueFanOutAsync(
+            // Manual selection: push to the fan-out endpoint now and wait. Only a confirmed
+            // delivery marks Step 2 complete.
+            var propagated = await this.regionService.SaveRegionAndFanOutAsync(
                 subscriptionId,
                 tenantId,
                 azureRegion,
                 this.CurrentUserEmailAddress,
                 ct).ConfigureAwait(false);
-            this.TempData["FlashMessage"] = "Region saved. Propagating to all regions...";
+
+            if (propagated)
+            {
+                this.TempData["FlashMessage"] = "Region saved and propagated to all regions.";
+            }
+            else
+            {
+                this.TempData["FlashMessage"] = "Region saved, but propagation to all regions did not complete. Please try again.";
+                this.TempData["FlashIsError"] = true;
+            }
         }
         catch (Exception ex)
         {
