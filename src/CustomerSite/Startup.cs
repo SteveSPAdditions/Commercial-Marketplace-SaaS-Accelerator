@@ -108,14 +108,15 @@ public class Startup
         };
         var creds = new ClientSecretCredential(config.TenantId.ToString(), config.ClientId.ToString(), config.ClientSecret);
 
-        // Scopes the SPP requests at sign-in. Includes Sites.FullControl.All so the portal
-        // can grant per-site Sites.Selected permissions to the runtime app at Step 4 of
-        // Setup on behalf of the customer admin who's signed in. Admin consent for these
-        // scopes is required (the customer admin clicks Grant consent at Step 3).
+        // Scopes the portal requests at *initial sign-in* -- authentication only. Keep this
+        // minimal: anything listed here is injected into the /authorize request and shown on
+        // the portal login consent screen. Sites.FullControl.All is deliberately NOT here --
+        // it is requested just-in-time during Setup (Step 4) via [AuthorizeForScopes] on the
+        // SetupController Resume actions, so the customer admin only sees that prompt at the
+        // point they actually configure sites for Sites.Selected, not at first login.
         var graphScopes = new[]
         {
             "User.Read",
-            "https://graph.microsoft.com/Sites.FullControl.All",
         };
 
         // Resolve the SPP signing certificate path. Allows the App Setting to be either

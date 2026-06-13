@@ -33,7 +33,13 @@ public class SetupController : BaseController
     private readonly SaaSApiClientConfiguration config;
     private readonly SaaSClientLogger<SetupController> logger;
 
-    /// <summary>Graph scopes requested per-call. Must be a subset of what was admin-consented at sign-in.</summary>
+    /// <summary>
+    /// Graph scopes requested per-call during Setup. These are acquired just-in-time via
+    /// incremental consent -- they do NOT need to be (and intentionally are not) consented at
+    /// initial sign-in. When a token can't be acquired silently, the action throws
+    /// MicrosoftIdentityWebChallengeUserException and the [AuthorizeForScopes]-decorated Resume
+    /// action drives the interactive consent prompt at the point of use (Step 4).
+    /// </summary>
     private static readonly string[] SitePermissionScopes = new[]
     {
         "https://graph.microsoft.com/Sites.FullControl.All",
