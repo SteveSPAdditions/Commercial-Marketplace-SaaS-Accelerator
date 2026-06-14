@@ -18,6 +18,15 @@ namespace Marketplace.SaaS.Accelerator.Services.Services;
 /// Read and Understood runtime Entra app. State token is HMAC-signed with the
 /// signaling secret so we can correlate the callback without trusting
 /// query-string contents.
+///
+/// Scope dependency (AppAddin2 Verification Gate Phase 3, brief §8): the runtime
+/// app's Tenant.Lookup delegated scope is consumed by the SPFx GetSetupState()
+/// helper. v1 /adminconsent grants tenant-wide consent to every permission
+/// currently registered on the runtime app, so as long as Tenant.Lookup is
+/// registered on the app BEFORE Step 3 runs, the SPFx caller will get tokens
+/// carrying it in `scp` without a per-user prompt. Tenants that completed
+/// Step 3 BEFORE the scope was added will see one incremental admin-consent
+/// prompt on the first SPFx call (open item 6 in the brief).
 /// </summary>
 public class TenantAdminConsentService : ITenantAdminConsentService
 {
