@@ -39,6 +39,10 @@
                     <text> on @Model.Consent.GrantedUtc.Value.ToString("yyyy-MM-dd")</text>
                 }
             </p>
+            <p class="setup-step__hint">
+                Consent removed or revoked in Microsoft Entra? Site permissions will start failing.
+                <a href="/Setup/@Model.AmpSubscriptionId/Consent">Re-grant tenant consent</a>.
+            </p>
         }
         else
         {
