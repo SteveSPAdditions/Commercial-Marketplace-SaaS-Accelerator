@@ -29,17 +29,20 @@ public class AzureRegionService : IAzureRegionService
     private readonly HttpClient httpClient;
     private readonly SaaSApiClientConfiguration config;
     private readonly ISubscriptionTenantConsentRepository consentRepo;
+    private readonly ISubscriptionsRepository subscriptionsRepo;
     private readonly IOutboxDispatcher dispatcher;
 
     public AzureRegionService(
         HttpClient httpClient,
         SaaSApiClientConfiguration config,
         ISubscriptionTenantConsentRepository consentRepo,
+        ISubscriptionsRepository subscriptionsRepo,
         IOutboxDispatcher dispatcher)
     {
         this.httpClient = httpClient;
         this.config = config;
         this.consentRepo = consentRepo;
+        this.subscriptionsRepo = subscriptionsRepo;
         this.dispatcher = dispatcher;
     }
 
@@ -224,6 +227,13 @@ public class AzureRegionService : IAzureRegionService
         consent.FanOutFailureRegions = null;
         this.consentRepo.Save(consent);
 
+        // Look up the AmpplanId for this subscription so the downstream consumer (Legeris
+        // InitialiseSaasTenant) can derive the per-tenant Subscriptions.Status: "free-trial"
+        // -> "trial", any other plan id -> "live". Null-tolerant for older subscription rows
+        // that pre-date AmpplanId capture; consumer defaults to "live" with a warning log.
+        var subscription = this.subscriptionsRepo.GetById(ampSubscriptionId);
+        var planId = subscription?.AmpplanId;
+
         // Immediate push: call the fan-out (signaling) endpoint synchronously and wait. Only a
         // confirmed delivery marks the step complete; otherwise the caller surfaces a retry.
         var payload = new
@@ -235,6 +245,7 @@ public class AzureRegionService : IAzureRegionService
             modifiedUtc = now,
             occurredBy = "Accelerator",
             actorUpn,
+            planId,
         };
         var entry = new NotificationOutbox
         {
