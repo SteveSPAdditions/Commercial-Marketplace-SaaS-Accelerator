@@ -95,12 +95,15 @@ public class SitePermissionService : ISitePermissionService
 
         // Idempotency: if a permission for this site already exists, reuse it. Avoids
         // duplicate permission objects when the caller retries on transient failures.
+        // Role is "manage" -- "write" is insufficient for R&U enable-library which needs
+        // ManageLists (create the shadow list + add Document Selector columns). Customer
+        // can downgrade to "read" via the portal once enable-library has completed.
         var existing = await FindExistingPermissionAsync(graphSiteId, accessToken, ct).ConfigureAwait(false);
         if (existing != null)
         {
-            if (!string.Equals(existing.Role, "write", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(existing.Role, "manage", StringComparison.OrdinalIgnoreCase))
             {
-                await PatchRoleAsync(graphSiteId, existing.PermissionId, "write", accessToken, ct).ConfigureAwait(false);
+                await PatchRoleAsync(graphSiteId, existing.PermissionId, "manage", accessToken, ct).ConfigureAwait(false);
             }
             return new GrantResult { PermissionId = existing.PermissionId, AlreadyExisted = true };
         }
@@ -108,7 +111,7 @@ public class SitePermissionService : ISitePermissionService
         var url = $"{GraphBaseUrl}/sites/{graphSiteId}/permissions";
         var payload = new
         {
-            roles = new[] { "write" },
+            roles = new[] { "manage" },
             grantedToIdentities = new[]
             {
                 new
@@ -146,7 +149,7 @@ public class SitePermissionService : ISitePermissionService
         => PatchRoleAsync(site.GraphSiteId, site.PermissionId, "read", accessToken, ct);
 
     public Task ReelevateToManageAsync(SubscriptionSite site, string accessToken, CancellationToken ct)
-        => PatchRoleAsync(site.GraphSiteId, site.PermissionId, "write", accessToken, ct);
+        => PatchRoleAsync(site.GraphSiteId, site.PermissionId, "manage", accessToken, ct);
 
     private async Task PatchRoleAsync(string graphSiteId, string permissionId, string role, string accessToken, CancellationToken ct)
     {
