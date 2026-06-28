@@ -1,0 +1,38 @@
+@{
+    ViewBag.Title = "Session expired";
+}
+<link href="https://fonts.googleapis.com/css?family=Quicksand:700" rel="stylesheet">
+<link href="~/css/Error/font-awesome.min.css" rel="stylesheet" />
+<link href="~/css/Error/style.css" rel="stylesheet" />
+
+<div class="container brand-activation mt20">
+    <div class="cm-panel-default mt20 p-4 text-left">
+        <h2 class="cm-section-heading mb-3">
+            <i class="fa fa-clock-o" aria-hidden="true"></i>&nbsp;Your sign-in link has expired
+        </h2>
+
+        <p>
+            We couldn't sign you in because the link from the Azure Portal is no longer valid.
+            This normally happens when the <strong>Product and Plan details</strong> page has been
+            left open for a while and then reused to open the portal &mdash; the secure token it
+            passes us is only valid for a short time.
+        </p>
+
+        <p class="mb-1"><strong>To continue, please get a fresh link:</strong></p>
+        <ol>
+            <li>Go back to the <strong>Azure Portal</strong>.</li>
+            <li>Open <strong>SaaS</strong> (Software as a Service) and select your subscription.</li>
+            <li>
+                <strong>Refresh</strong> the <strong>Product and Plan details</strong> page
+                (or close and reopen it).
+            </li>
+            <li>Select <strong>Configure Account</strong> / <strong>Open SaaS Account</strong> again to return here.</li>
+        </ol>
+
+        <p class="text-muted">
+            Nothing is wrong with your subscription &mdash; you just need a new link to sign in.
+        </p>
+
+        <a asp-action="Index" asp-controller="Home" class="cm-button-error">Go To Home Page</a>
+    </div>
+</div>

@@ -238,7 +238,22 @@ public class HomeController : BaseController
                 {
                     this.TempData["ShowWelcomeScreen"] = null;
                     token = token.Replace(' ', '+');
-                    var newSubscription = await this.apiService.ResolveAsync(token).ConfigureAwait(false);
+
+                    ResolvedSubscriptionResult newSubscription;
+                    try
+                    {
+                        newSubscription = await this.apiService.ResolveAsync(token).ConfigureAwait(false);
+                    }
+                    catch (MarketplaceException resolveEx)
+                    {
+                        // The marketplace token carried in from the Azure Portal "Product and Plan
+                        // details" page is short-lived/single-use. When the customer leaves that page
+                        // open and reuses it to enter the portal, the token has expired and the
+                        // Marketplace Resolve API returns 400 ("Invalid token. Token is expired.").
+                        // Show a clear, actionable page instead of the generic "Error 500" view.
+                        this.logger.LogError($"Could not resolve the marketplace token (it has most likely expired). Message:{resolveEx.Message} :: {resolveEx.InnerException}");
+                        return this.View("SessionExpired");
+                    }
                     if (newSubscription != null && newSubscription.SubscriptionId != default)
                     {
                         Offers offers = new Offers()
