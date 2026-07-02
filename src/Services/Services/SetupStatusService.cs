@@ -53,6 +53,7 @@ public class SetupStatusService : ISetupStatusService
         var regionSelected = consent?.AzureRegion != null;
         var regionFanOut = consent?.TenantRegionsFanOutCompleteUtc.HasValue == true;
         var consented = consent?.RuntimeAppConsentedUtc.HasValue == true;
+        var teamsActivityConsented = consent?.TeamsActivityAppConsentedUtc.HasValue == true;
 
         var hasSites = sites.Count > 0;
         // The sites step counts as complete only when every enrolled site has been granted.
@@ -65,7 +66,8 @@ public class SetupStatusService : ISetupStatusService
         var completed = 1
             + (regionSelected && regionFanOut ? 1 : 0)
             + (consented ? 1 : 0)
-            + (sitesComplete ? 1 : 0);
+            + (sitesComplete ? 1 : 0)
+            + (teamsActivityConsented ? 1 : 0);
 
         return new SetupStatusSummary
         {
@@ -73,6 +75,7 @@ public class SetupStatusService : ISetupStatusService
             RegionSelected = regionSelected,
             RegionFanOutComplete = regionFanOut,
             TenantConsented = consented,
+            TeamsActivityConsented = teamsActivityConsented,
             HasSites = hasSites,
             CompletedSteps = completed,
             SetupUrl = $"/Setup/{ampSubscriptionId}",

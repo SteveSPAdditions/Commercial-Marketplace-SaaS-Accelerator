@@ -282,6 +282,24 @@ public class SetupController : BaseController
             CanReelevate = s.CurrentRole == "read",
         }).ToList();
 
+        // Step 5 gating: the Teams activity app is a SECOND tenant consent (mandatory -- Teams
+        // activity notifications can't be sent without it). Its only real prerequisite is that the
+        // tenant is known + runtime consent has established tenant trust; it does not depend on sites.
+        if (consent?.RuntimeAppConsentedUtc.HasValue != true)
+        {
+            vm.Step5 = StepState.Locked;
+        }
+        else
+        {
+            vm.Step5 = consent.TeamsActivityAppConsentedUtc.HasValue ? StepState.Complete : StepState.NotStarted;
+        }
+        vm.TeamsActivity = new ConsentStepViewModel
+        {
+            Granted = consent?.TeamsActivityAppConsentedUtc.HasValue ?? false,
+            GrantedUtc = consent?.TeamsActivityAppConsentedUtc,
+            GrantedByUpn = consent?.TeamsActivityConsentedByUpn,
+        };
+
         if (this.TempData["FlashMessage"] is string flash)
         {
             vm.FlashMessage = flash;
@@ -447,6 +465,92 @@ public class SetupController : BaseController
         return this.RedirectToAction(nameof(Index), new { subscriptionId = subscriptionId.Value });
     }
 
+    [HttpGet("/Setup/{subscriptionId:guid}/TeamsActivity")]
+    public IActionResult TeamsActivity(Guid subscriptionId)
+    {
+        if (!this.User.Identity.IsAuthenticated)
+        {
+            return this.RedirectToAction("Index", "Home");
+        }
+
+        if (!this.TryAuthorizeSetup(subscriptionId, out var subscription))
+        {
+            return this.SetupAccessDenied();
+        }
+
+        var tenantId = subscription.PurchaserTenantId ?? Guid.Empty;
+        if (tenantId == Guid.Empty)
+        {
+            this.TempData["FlashMessage"] = "This subscription has no tenant id; contact support.";
+            this.TempData["FlashIsError"] = true;
+            return this.RedirectToAction(nameof(Index), new { subscriptionId });
+        }
+
+        var callbackUri = $"{this.Request.Scheme}://{this.Request.Host}/api/setup/teams-consent-callback";
+        string url;
+        try
+        {
+            url = this.consentService.BuildTeamsActivityConsentUrl(tenantId, subscriptionId, callbackUri);
+        }
+        catch (InvalidOperationException ex)
+        {
+            this.logger.LogError($"BuildTeamsActivityConsentUrl failed: {ex.Message}");
+            this.TempData["FlashMessage"] = "The Teams activity app is not configured on this Accelerator. Contact support.";
+            this.TempData["FlashIsError"] = true;
+            return this.RedirectToAction(nameof(Index), new { subscriptionId });
+        }
+
+        return this.Redirect(url);
+    }
+
+    [HttpGet("/api/setup/teams-consent-callback")]
+    public async Task<IActionResult> TeamsActivityConsentCallback(
+        string state,
+        string admin_consent,
+        string tenant,
+        string error,
+        string error_description,
+        CancellationToken ct)
+    {
+        var subscriptionId = this.consentService.ValidateCallbackState(state);
+        if (subscriptionId == null)
+        {
+            this.logger.LogError("Teams consent callback received invalid or expired state");
+            return this.RedirectToAction("Index", "Home");
+        }
+
+        var sub = this.subscriptionRepo.GetById(subscriptionId.Value);
+        if (sub == null)
+        {
+            return this.RedirectToAction("Index", "Home");
+        }
+
+        if (!string.IsNullOrEmpty(error))
+        {
+            this.logger.LogError($"Teams consent callback error for {subscriptionId}: {error} - {error_description}");
+            this.TempData["FlashMessage"] = $"Teams activity consent was not granted: {error}";
+            this.TempData["FlashIsError"] = true;
+            return this.RedirectToAction(nameof(Index), new { subscriptionId = subscriptionId.Value });
+        }
+
+        var granted = string.Equals(admin_consent, "True", StringComparison.OrdinalIgnoreCase);
+        if (!granted)
+        {
+            this.TempData["FlashMessage"] = "Teams activity consent was not granted.";
+            this.TempData["FlashIsError"] = true;
+            return this.RedirectToAction(nameof(Index), new { subscriptionId = subscriptionId.Value });
+        }
+
+        await this.consentService.RecordTeamsActivityConsentAsync(
+            subscriptionId.Value,
+            this.CurrentUserEmailAddress,
+            objectId: null,
+            ct).ConfigureAwait(false);
+
+        this.TempData["FlashMessage"] = "Teams activity app consent recorded.";
+        return this.RedirectToAction(nameof(Index), new { subscriptionId = subscriptionId.Value });
+    }
+
     [HttpGet("/Setup/{subscriptionId:guid}/Status.json")]
     public IActionResult Status(Guid subscriptionId)
     {
@@ -467,6 +571,7 @@ public class SetupController : BaseController
             regionSelected = consent?.AzureRegion != null,
             regionFanOutComplete = consent?.TenantRegionsFanOutCompleteUtc.HasValue ?? false,
             consented = consent?.RuntimeAppConsentedUtc.HasValue ?? false,
+            teamsActivityConsented = consent?.TeamsActivityAppConsentedUtc.HasValue ?? false,
             sites = sites.Select(s => new
             {
                 id = s.Id,

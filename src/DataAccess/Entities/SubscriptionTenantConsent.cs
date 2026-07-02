@@ -29,6 +29,13 @@ public partial class SubscriptionTenantConsent
 
     public string ConsentedByObjectId { get; set; }
 
+    // Setup step 5 -- admin consent for the shared Acknowledge Teams app (TeamsActivity.Send).
+    public DateTime? TeamsActivityAppConsentedUtc { get; set; }
+
+    public string TeamsActivityConsentedByUpn { get; set; }
+
+    public string TeamsActivityConsentedByObjectId { get; set; }
+
     public DateTime? CreatedUtc { get; set; }
 
     public DateTime? ModifiedUtc { get; set; }

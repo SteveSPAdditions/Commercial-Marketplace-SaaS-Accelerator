@@ -569,6 +569,9 @@ public partial class SaasKitContext : DbContext
             entity.Property(e => e.RuntimeAppConsentedUtc).HasColumnType("datetime");
             entity.Property(e => e.ConsentedByUpn).HasMaxLength(255).IsUnicode(false);
             entity.Property(e => e.ConsentedByObjectId).HasMaxLength(64).IsUnicode(false);
+            entity.Property(e => e.TeamsActivityAppConsentedUtc).HasColumnType("datetime");
+            entity.Property(e => e.TeamsActivityConsentedByUpn).HasMaxLength(255).IsUnicode(false);
+            entity.Property(e => e.TeamsActivityConsentedByObjectId).HasMaxLength(64).IsUnicode(false);
             entity.Property(e => e.CreatedUtc).HasColumnType("datetime");
             entity.Property(e => e.ModifiedUtc).HasColumnType("datetime");
         });

@@ -147,6 +147,14 @@ public class SaaSApiClientConfiguration
     public string RuntimeAppClientId { get; set; }
 
     /// <summary>
+    /// Entra app id for the shared Acknowledge Teams application (the app backing the AppSource
+    /// Teams package's webApplicationInfo; needs TeamsActivity.Send). Consent target for Setup
+    /// step 5 -- mandatory, as Teams activity notifications can't be sent without it. One shared
+    /// multi-tenant app for ZoHo + SaaS.
+    /// </summary>
+    public string TeamsActivityAppClientId { get; set; }
+
+    /// <summary>
     /// Path to the SPP's client-credential certificate (.pfx). Absolute path, or relative
     /// to the app's ContentRoot.
     /// </summary>

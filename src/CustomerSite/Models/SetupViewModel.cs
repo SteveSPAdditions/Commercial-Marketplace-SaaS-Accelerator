@@ -27,9 +27,11 @@ public class SetupViewModel
     public StepState Step2 { get; set; }
     public StepState Step3 { get; set; }
     public StepState Step4 { get; set; }
+    public StepState Step5 { get; set; }
 
     public RegionPickerViewModel RegionPicker { get; set; }
     public ConsentStepViewModel Consent { get; set; }
+    public ConsentStepViewModel TeamsActivity { get; set; }
     public IReadOnlyList<SiteRowViewModel> Sites { get; set; } = new List<SiteRowViewModel>();
 
     public string FlashMessage { get; set; }

@@ -22,13 +22,16 @@ public class SetupStatusSummary
     /// <summary>Tenant admin has granted consent to the runtime app.</summary>
     public bool TenantConsented { get; set; }
 
+    /// <summary>Tenant admin has granted consent to the shared Acknowledge Teams app (TeamsActivity.Send).</summary>
+    public bool TeamsActivityConsented { get; set; }
+
     /// <summary>At least one SharePoint site has been enrolled.</summary>
     public bool HasSites { get; set; }
 
-    /// <summary>1..4 — Step 1 is always counted complete when this summary is produced.</summary>
+    /// <summary>1..5 — Step 1 is always counted complete when this summary is produced.</summary>
     public int CompletedSteps { get; set; }
 
-    public int TotalSteps => 4;
+    public int TotalSteps => 5;
 
     public bool IsComplete => this.CompletedSteps >= this.TotalSteps;
 

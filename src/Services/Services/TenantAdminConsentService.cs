@@ -55,6 +55,24 @@ public class TenantAdminConsentService : ITenantAdminConsentService
             throw new InvalidOperationException("RuntimeAppClientId is not configured");
         }
 
+        return this.BuildAdminConsentUrl(this.config.RuntimeAppClientId, tenantId, ampSubscriptionId, callbackUri);
+    }
+
+    public string BuildTeamsActivityConsentUrl(Guid tenantId, Guid ampSubscriptionId, string callbackUri)
+    {
+        // TeamsActivityAppClientId is the shared Acknowledge Teams app (TeamsActivity.Send). This is
+        // a SECOND admin consent, separate from the runtime app -- mandatory step 5, since Teams
+        // activity notifications can't be sent without it. One shared app across ZoHo + SaaS.
+        if (string.IsNullOrWhiteSpace(this.config.TeamsActivityAppClientId))
+        {
+            throw new InvalidOperationException("TeamsActivityAppClientId is not configured");
+        }
+
+        return this.BuildAdminConsentUrl(this.config.TeamsActivityAppClientId, tenantId, ampSubscriptionId, callbackUri);
+    }
+
+    private string BuildAdminConsentUrl(string clientId, Guid tenantId, Guid ampSubscriptionId, string callbackUri)
+    {
         var issued = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var payload = $"{ampSubscriptionId:N}.{issued}";
         var signature = Sign(payload);
@@ -65,7 +83,7 @@ public class TenantAdminConsentService : ITenantAdminConsentService
             : this.config.AdAuthenticationEndPoint.TrimEnd('/');
 
         return $"{authority}/{tenantId}/adminconsent"
-               + $"?client_id={Uri.EscapeDataString(this.config.RuntimeAppClientId)}"
+               + $"?client_id={Uri.EscapeDataString(clientId)}"
                + $"&redirect_uri={Uri.EscapeDataString(callbackUri)}"
                + $"&state={Uri.EscapeDataString(state)}";
     }
@@ -118,6 +136,18 @@ public class TenantAdminConsentService : ITenantAdminConsentService
         consent.RuntimeAppConsentedUtc = DateTime.UtcNow;
         consent.ConsentedByUpn = upn;
         consent.ConsentedByObjectId = objectId;
+        this.consentRepo.Save(consent);
+        return Task.CompletedTask;
+    }
+
+    public Task RecordTeamsActivityConsentAsync(Guid ampSubscriptionId, string upn, string objectId, CancellationToken ct)
+    {
+        var consent = this.consentRepo.GetByAmpSubscriptionId(ampSubscriptionId)
+                      ?? new SubscriptionTenantConsent { AmpSubscriptionId = ampSubscriptionId };
+
+        consent.TeamsActivityAppConsentedUtc = DateTime.UtcNow;
+        consent.TeamsActivityConsentedByUpn = upn;
+        consent.TeamsActivityConsentedByObjectId = objectId;
         this.consentRepo.Save(consent);
         return Task.CompletedTask;
     }

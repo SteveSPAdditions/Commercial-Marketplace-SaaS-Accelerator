@@ -31,4 +31,18 @@ public interface ITenantAdminConsentService
         string upn,
         string objectId,
         CancellationToken ct);
+
+    /// <summary>
+    /// Construct the /adminconsent URL for the shared Acknowledge Teams app (Setup step 5).
+    /// Same signed-state choreography as <see cref="BuildConsentUrl"/> but targets the
+    /// TeamsActivityAppClientId app (TeamsActivity.Send).
+    /// </summary>
+    string BuildTeamsActivityConsentUrl(Guid tenantId, Guid ampSubscriptionId, string callbackUri);
+
+    /// <summary>Mark Teams-activity-app consent as granted on the SubscriptionTenantConsent row.</summary>
+    Task RecordTeamsActivityConsentAsync(
+        Guid ampSubscriptionId,
+        string upn,
+        string objectId,
+        CancellationToken ct);
 }

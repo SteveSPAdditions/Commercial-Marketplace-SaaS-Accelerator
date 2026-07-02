@@ -100,6 +100,7 @@ public class Startup
             WebhookBufferHmacSecret = this.Configuration["SaaSApiConfiguration:WebhookBufferHmacSecret"],
             AzureRegionSelectorsFallback = this.Configuration["SaaSApiConfiguration:AzureRegionSelectorsFallback"],
             RuntimeAppClientId = this.Configuration["SaaSApiConfiguration:RuntimeAppClientId"],
+            TeamsActivityAppClientId = this.Configuration["SaaSApiConfiguration:TeamsActivityAppClientId"],
             MTCertPath = this.Configuration["SaaSApiConfiguration:MTCertPath"],
             MTCertPassword = this.Configuration["SaaSApiConfiguration:MTCertPassword"],
             OutboxMaxAttempts = int.TryParse(this.Configuration["SaaSApiConfiguration:OutboxMaxAttempts"], out var oma) ? oma : 12,

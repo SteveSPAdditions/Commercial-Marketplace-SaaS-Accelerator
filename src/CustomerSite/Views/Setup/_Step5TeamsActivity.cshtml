@@ -1,0 +1,60 @@
+@model Marketplace.SaaS.Accelerator.CustomerSite.Models.SetupViewModel
+@{
+    var stateClass = Model.Step5 switch
+    {
+        Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Complete => "state-complete",
+        Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.NotStarted => "state-notstarted",
+        _ => "state-locked"
+    };
+}
+
+<li class="setup-step @stateClass" data-step="teamsactivity">
+    <div class="setup-step__marker">
+        @if (Model.Step5 == Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Complete)
+        {
+            <i class="fa fa-check-circle"></i>
+        }
+        else if (Model.Step5 == Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Locked)
+        {
+            <i class="fa fa-lock"></i>
+        }
+        else
+        {
+            <i class="fa fa-circle-o"></i>
+        }
+    </div>
+    <div class="setup-step__body">
+        <h3 class="setup-step__title">Send Teams Activities consent</h3>
+
+        @if (Model.Step5 == Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Locked)
+        {
+            <p class="setup-step__meta">Available after tenant consent.</p>
+        }
+        else if (Model.TeamsActivity != null && Model.TeamsActivity.Granted)
+        {
+            <p class="setup-step__meta">
+                Granted by @Model.TeamsActivity.GrantedByUpn
+                @if (Model.TeamsActivity.GrantedUtc.HasValue)
+                {
+                    <text> on @Model.TeamsActivity.GrantedUtc.Value.ToString("yyyy-MM-dd")</text>
+                }
+            </p>
+            <p class="setup-step__hint">
+                Consent removed or revoked in Microsoft Entra? Read and Understood will stop sending
+                acknowledgement activities to your users in Microsoft Teams.
+                <a href="/Setup/@Model.AmpSubscriptionId/TeamsActivity">Re-grant Send Teams Activities consent</a>.
+            </p>
+        }
+        else
+        {
+            <p class="setup-step__meta">
+                Grant tenant-wide consent for the Send Teams Activities permission so Read and Understood
+                can post acknowledgement activities to your users in Microsoft Teams. This is required for
+                the Teams experience.
+            </p>
+            <a class="cm-button-default" href="/Setup/@Model.AmpSubscriptionId/TeamsActivity">
+                Grant Send Teams Activities consent
+            </a>
+        }
+    </div>
+</li>
