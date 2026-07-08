@@ -298,6 +298,19 @@ public class HomeController : BaseController
                         subscriptionExtension.SubscriptionParameters = this.subscriptionService.GetSubscriptionsParametersById(newSubscription.SubscriptionId, currentPlan.PlanGuid);
                         subscriptionExtension.IsAutomaticProvisioningSupported = Convert.ToBoolean(this.applicationConfigRepository.GetValueByName("IsAutomaticProvisioningSupported"));
                         subscriptionExtension.AcceptSubscriptionUpdates = Convert.ToBoolean(this.applicationConfigRepository.GetValueByName("AcceptSubscriptionUpdates"));
+
+                        // Self-service auto-activation: when the freshly-resolved subscription still
+                        // needs fulfillment and the offer supports automatic provisioning, activate it
+                        // on entry (no manual Activate click) and route the customer straight to Setup.
+                        // Already-active subscriptions fall through to the subscriptions-list redirect below.
+                        if (subscriptionExtension.SubscriptionStatus == SubscriptionStatusEnumExtension.PendingFulfillmentStart
+                            && subscriptionExtension.IsAutomaticProvisioningSupported)
+                        {
+                            return await this.AutoActivateSubscriptionAsync(
+                                newSubscription.SubscriptionId,
+                                currentUserId,
+                                subscriptionExtension.SubscriptionParameters);
+                        }
                     }
                 }
                 else
@@ -325,13 +338,65 @@ public class HomeController : BaseController
                 }
             }
 
-            return this.View(subscriptionExtension);
+            // On entering the portal via a marketplace token, land the customer on their full
+            // subscriptions list rather than the single resolved-subscription details page.
+            return this.RedirectToAction(nameof(this.Subscriptions));
         }
         catch (Exception ex)
         {
             this.logger.LogError($"Message:{ex.Message} :: {ex.InnerException}   ");
             return this.View("Error", ex);
         }
+    }
+
+    /// <summary>
+    /// Performs self-service activation for a freshly-resolved subscription that supports
+    /// automatic provisioning, then routes the customer to the Setup wizard (when
+    /// <c>RedirectActivateToSetup</c> is configured) or the subscriptions list. Mirrors the
+    /// automatic-provisioning branch of <see cref="SubscriptionOperationAsync"/> for the
+    /// portal-entry path, where no manual Activate click occurs.
+    /// </summary>
+    /// <param name="subscriptionId">The subscription identifier.</param>
+    /// <param name="currentUserId">The current user identifier, used for audit logging.</param>
+    /// <param name="subscriptionParameters">Subscription parameters to forward on the web notification.</param>
+    /// <returns>The <see cref="IActionResult" />.</returns>
+    private async Task<IActionResult> AutoActivateSubscriptionAsync(Guid subscriptionId, int currentUserId, List<SubscriptionParametersModel> subscriptionParameters)
+    {
+        try
+        {
+            this.logger.Info(HttpUtility.HtmlEncode($"Auto-activating subscription on portal entry: SubscriptionId: {subscriptionId}"));
+            var oldValue = this.subscriptionService.GetPartnerSubscription(this.CurrentUserEmailAddress, subscriptionId, true).FirstOrDefault();
+            if (oldValue != null && oldValue.SubscriptionStatus.ToString() != SubscriptionStatusEnumExtension.PendingActivation.ToString())
+            {
+                this.subscriptionService.UpdateStateOfSubscription(subscriptionId, SubscriptionStatusEnumExtension.PendingActivation.ToString(), true);
+                SubscriptionAuditLogs auditLog = new SubscriptionAuditLogs()
+                {
+                    Attribute = Convert.ToString(SubscriptionLogAttributes.Status),
+                    SubscriptionId = oldValue.SubscribeId,
+                    NewValue = SubscriptionStatusEnumExtension.PendingActivation.ToString(),
+                    OldValue = oldValue.SubscriptionStatus.ToString(),
+                    CreateBy = currentUserId,
+                    CreateDate = DateTime.Now,
+                };
+                this.subscriptionLogRepository.Save(auditLog);
+            }
+
+            this.pendingActivationStatusHandlers.Process(subscriptionId);
+            await _webNotificationService.PushExternalWebNotificationAsync(subscriptionId, subscriptionParameters);
+        }
+        catch (MarketplaceException fex)
+        {
+            this.logger.Error(fex.Message);
+        }
+
+        this.notificationStatusHandlers.Process(subscriptionId);
+
+        if (this.saaSApiClientConfiguration?.RedirectActivateToSetup == true)
+        {
+            return this.RedirectToAction("Index", "Setup", new { subscriptionId });
+        }
+
+        return this.RedirectToAction(nameof(this.Subscriptions));
     }
 
     /// <summary>
@@ -405,6 +470,42 @@ public class HomeController : BaseController
                     return this.RedirectToAction(nameof(this.Index));
                 }
                 subscriptionDetail.PlanList = this.subscriptionService.GetAllSubscriptionPlans();
+
+                return this.PartialView(subscriptionDetail);
+            }
+            else
+            {
+                return this.RedirectToAction(nameof(this.Index));
+            }
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogError($"Message:{ex.Message} :: {ex.InnerException}   ");
+            return this.View("Error", ex);
+        }
+    }
+
+    /// <summary>
+    /// Gets the read-only details panel for the selected subscription (opened from the
+    /// subscriptions-list Actions menu).
+    /// </summary>
+    /// <param name="subscriptionId">The subscription identifier.</param>
+    /// <returns>
+    /// The <see cref="IActionResult" />.
+    /// </returns>
+    public IActionResult SubscriptionInfoDetail(Guid subscriptionId)
+    {
+        this.logger.Info(HttpUtility.HtmlEncode($"Home Controller / SubscriptionInfoDetail subscriptionId:{subscriptionId}"));
+        try
+        {
+            if (this.User.Identity.IsAuthenticated)
+            {
+                var subscriptionDetail = this.subscriptionService.GetPartnerSubscription(this.CurrentUserEmailAddress, subscriptionId).FirstOrDefault();
+                if (subscriptionDetail == null)
+                {
+                    this.logger.LogError($"Cannot find subscription or subscription associated to the current user");
+                    return this.RedirectToAction(nameof(this.Index));
+                }
 
                 return this.PartialView(subscriptionDetail);
             }

@@ -64,3 +64,20 @@ function confirmSwitchToRead() {
         'whenever you need to make admin changes.\n\nContinue?'
     );
 }
+
+// Step 4 -- Delete site (double confirmation).
+// Deleting revokes Read and Understood's per-site permission and removes the site
+// from setup. It's destructive and not easily undone (the site has to be re-added
+// and re-granted), so we confirm twice: an explanatory first prompt, then a final
+// "are you sure" gate. Both must be accepted for the form to submit.
+function confirmRemoveSite(form) {
+    var url = (form && form.getAttribute('data-site-url')) || 'this site';
+    if (!confirm(
+        'Remove "' + url + '"?\n\n' +
+        'Read and Understood\'s permission on this site will be revoked and the site ' +
+        'will be removed from setup. Acknowledgement tracking on this site will stop.'
+    )) {
+        return false;
+    }
+    return confirm('This cannot be undone. Remove "' + url + '" for certain?');
+}

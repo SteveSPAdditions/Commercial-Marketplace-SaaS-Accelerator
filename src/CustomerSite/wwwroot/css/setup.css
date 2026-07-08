@@ -1,100 +1,179 @@
-/* Read and Understood post-acceptance setup page */
+/* Read and Understood post-acceptance setup page.
+   Styled to echo the Azure portal (Fluent UI): Segoe UI, Azure blue (#0078d4),
+   thin neutral borders, 2px corners, numbered step badges and per-step status
+   labels. All rules are scoped under the setup classes so the rest of the site
+   is unaffected. */
 
 .setup-container {
-    max-width: 880px;
+    max-width: 900px;
+    font-family: "Segoe UI", "Segoe UI Web (West European)", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif;
 }
 
 .setup-subhead {
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 0.9rem;
+    color: #605e5c;
+    font-size: 0.85rem;
     margin-left: 0.75rem;
 }
 
+/* ---- Fluent MessageBar (flash) ---- */
 .setup-flash {
     margin-top: 20px;
+    border-radius: 2px;
+    border: 1px solid #edebe9;
+    background: #f3f2f1;
+    color: #323130;
+    font-size: 0.875rem;
+    padding: 0.75rem 1rem;
 }
 
+.setup-flash.alert-info {
+    background: #eff6fc;
+    border-color: #0078d4;
+}
+
+.setup-flash.alert-danger {
+    background: #fde7e9;
+    border-color: #a4262c;
+}
+
+/* ---- Step tiles ---- */
 .setup-checklist {
     list-style: none;
     padding: 0;
     margin: 0;
+    counter-reset: setupstep;
 }
 
 .setup-step {
-    background: #ffffff;
-    border-radius: 6px;
-    padding: 1.5rem 1.5rem 1.5rem 4rem;
-    margin-bottom: 1rem;
+    counter-increment: setupstep;
     position: relative;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-    color: #1f2937;
+    background: #ffffff;
+    border: 1px solid #edebe9;
+    border-left: 3px solid #c8c6c4;
+    border-radius: 2px;
+    padding: 18px 24px 18px 64px;
+    margin-bottom: 12px;
+    color: #323130;
+    box-shadow: 0 1.6px 3.6px rgba(0, 0, 0, 0.08), 0 0.3px 0.9px rgba(0, 0, 0, 0.06);
 }
 
 .setup-step.state-locked {
-    opacity: 0.55;
+    background: #faf9f8;
+    border-left-color: #e1dfdd;
+    color: #605e5c;
 }
 
-.setup-step.state-complete {
-    border-left: 4px solid #16a34a;
-}
+.setup-step.state-complete { border-left-color: #107c10; }
+.setup-step.state-inprogress { border-left-color: #0078d4; }
+.setup-step.state-notstarted { border-left-color: #0078d4; }
+.setup-step.state-failed { border-left-color: #a4262c; }
 
-.setup-step.state-inprogress {
-    border-left: 4px solid #2563eb;
-}
-
-.setup-step.state-notstarted {
-    border-left: 4px solid #d1d5db;
-}
-
-.setup-step.state-locked {
-    border-left: 4px solid #e5e7eb;
-}
-
+/* ---- Numbered circular badge ---- */
 .setup-step__marker {
     position: absolute;
-    top: 1.5rem;
-    left: 1.25rem;
-    font-size: 1.5rem;
-    color: #6b7280;
+    top: 18px;
+    left: 20px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+    background: #ffffff;
+    border: 1.5px solid #0078d4;
+    color: #0078d4;
+    line-height: 1;
 }
 
-.setup-step.state-complete .setup-step__marker { color: #16a34a; }
-.setup-step.state-inprogress .setup-step__marker { color: #2563eb; }
-.setup-step.state-failed .setup-step__marker { color: #dc2626; }
+/* Number by default; the FA icon is hidden unless the state opts in. */
+.setup-step__marker::before { content: counter(setupstep); }
+.setup-step__marker i { display: none; font-size: 0.9rem; }
 
-.setup-step__title {
-    font-size: 1.1rem;
+.setup-step.state-complete .setup-step__marker::before,
+.setup-step.state-inprogress .setup-step__marker::before,
+.setup-step.state-locked .setup-step__marker::before,
+.setup-step.state-failed .setup-step__marker::before { content: ""; }
+
+.setup-step.state-complete .setup-step__marker i,
+.setup-step.state-inprogress .setup-step__marker i,
+.setup-step.state-locked .setup-step__marker i,
+.setup-step.state-failed .setup-step__marker i { display: inline-block; }
+
+.setup-step.state-complete .setup-step__marker {
+    background: #107c10;
+    border-color: #107c10;
+    color: #ffffff;
+}
+
+.setup-step.state-inprogress .setup-step__marker {
+    border-color: #0078d4;
+    color: #0078d4;
+}
+
+.setup-step.state-locked .setup-step__marker {
+    background: #f3f2f1;
+    border-color: #c8c6c4;
+    color: #a19f9d;
+}
+
+.setup-step.state-failed .setup-step__marker {
+    background: #a4262c;
+    border-color: #a4262c;
+    color: #ffffff;
+}
+
+/* ---- Per-step status label (top-right) ---- */
+.setup-step::after {
+    position: absolute;
+    top: 18px;
+    right: 24px;
+    font-size: 0.75rem;
     font-weight: 600;
-    margin: 0 0 0.5rem 0;
-    color: #111827;
+    letter-spacing: 0.01em;
+}
+
+.setup-step.state-complete::after { content: "Complete"; color: #107c10; }
+.setup-step.state-inprogress::after { content: "In progress"; color: #0078d4; }
+.setup-step.state-notstarted::after { content: "Action needed"; color: #0078d4; }
+.setup-step.state-locked::after { content: "Locked"; color: #a19f9d; }
+.setup-step.state-failed::after { content: "Failed"; color: #a4262c; }
+
+/* ---- Step content ---- */
+.setup-step__title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0 0 0.4rem 0;
+    padding-right: 96px;
+    color: #323130;
 }
 
 .setup-step__meta {
     margin: 0.25rem 0;
-    color: #374151;
+    color: #605e5c;
+    font-size: 0.875rem;
 }
 
 .setup-step__hint {
     margin-top: 0.75rem;
-    color: #6b7280;
-    font-size: 0.9rem;
+    color: #605e5c;
+    font-size: 0.85rem;
 }
 
-.setup-step__hint--inflight {
-    color: #2563eb;
-}
-
-.setup-step__hint--warn {
-    color: #b45309;
-}
+.setup-step__hint--inflight { color: #0078d4; }
+.setup-step__hint--warn { color: #d83b01; }
 
 .setup-step__hint-detail {
     display: block;
     margin-top: 0.25rem;
     font-size: 0.8rem;
-    color: #9ca3af;
+    color: #a19f9d;
 }
 
+.setup-step__hint a { color: #0078d4; }
+
+/* ---- Region picker (Fluent card radios) ---- */
 .setup-region-form {
     margin-top: 1rem;
 }
@@ -102,7 +181,7 @@
 .setup-region-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 0.75rem;
+    gap: 0.5rem;
     margin-bottom: 1rem;
 }
 
@@ -110,48 +189,70 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.75rem 1rem;
-    border: 1px solid #d1d5db;
-    border-radius: 4px;
+    padding: 0.6rem 0.85rem;
+    border: 1px solid #c8c6c4;
+    border-radius: 2px;
     cursor: pointer;
-    background: #f9fafb;
-    transition: border-color 120ms;
+    background: #ffffff;
+    font-size: 0.875rem;
+    transition: border-color 120ms ease, background-color 120ms ease;
 }
 
 .setup-region-option:hover {
-    border-color: #2563eb;
+    border-color: #0078d4;
+    background: #eff6fc;
+}
+
+.setup-region-option:has(input:checked) {
+    border-color: #0078d4;
+    box-shadow: inset 0 0 0 1px #0078d4;
+    background: #eff6fc;
 }
 
 .setup-region-option input[type="radio"] {
     margin: 0;
+    accent-color: #0078d4;
 }
 
+/* ---- Sites grid (Fluent DetailsList) ---- */
 .setup-sites-table {
     width: 100%;
     border-collapse: collapse;
     margin-top: 1rem;
+    font-size: 0.875rem;
 }
 
 .setup-sites-table th,
 .setup-sites-table td {
-    padding: 0.625rem 0.75rem;
+    padding: 0.55rem 0.75rem;
     text-align: left;
-    border-bottom: 1px solid #e5e7eb;
-    font-size: 0.95rem;
+    border-bottom: 1px solid #edebe9;
 }
 
 .setup-sites-table th {
-    background: #f3f4f6;
-    color: #374151;
+    background: #faf9f8;
+    color: #605e5c;
     font-weight: 600;
+    border-bottom: 1px solid #e1dfdd;
+    text-transform: none;
+}
+
+.setup-sites-table tbody tr:hover {
+    background: #f3f2f1;
+}
+
+/* ---- Add-site form (leads the section) ---- */
+.setup-add-site {
+    margin: 0.5rem 0 1.25rem;
 }
 
 .setup-add-site .setup-input-label {
     flex: 0 0 auto;
     margin-bottom: 0;
     white-space: nowrap;
-    font-weight: 500;
-    color: #374151;
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #323130;
 }
 
 .setup-input-row {
@@ -162,35 +263,89 @@
 
 .setup-input {
     flex: 1;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid #d1d5db;
-    border-radius: 4px;
-    font-size: 0.95rem;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid #8a8886;
+    border-radius: 2px;
+    font-size: 0.875rem;
+    color: #323130;
 }
 
-.cm-button-link {
+.setup-input:hover { border-color: #323130; }
+
+.setup-input:focus {
+    outline: none;
+    border-color: #0078d4;
+    box-shadow: inset 0 -1px 0 0 #0078d4;
+}
+
+.setup-inline-form { display: inline; }
+
+/* ---- Buttons (Azure command styling, scoped to setup) ---- */
+.setup-container .cm-button-default {
     display: inline-block;
-    padding: 0.25rem 0.5rem;
-    color: #2563eb;
+    background: #0078d4;
+    color: #ffffff;
+    border: 1px solid #0078d4;
+    padding: 0 16px;
+    height: 32px;
+    line-height: 30px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border-radius: 2px;
+    cursor: pointer;
     text-decoration: none;
-    font-size: 0.9rem;
-    border-radius: 3px;
+    text-align: center;
 }
 
-.cm-button-link:hover {
-    background: #eff6ff;
+.setup-container .cm-button-default:hover {
+    background: #106ebe;
+    border-color: #106ebe;
+    color: #ffffff;
+    text-decoration: none;
+}
+
+.setup-container .cm-button-default:active {
+    background: #005a9e;
+    border-color: #005a9e;
+}
+
+.setup-container .cm-button-link {
+    display: inline-block;
+    padding: 0 4px;
+    background: none;
+    border: none;
+    color: #0078d4;
+    text-decoration: none;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.setup-container .cm-button-link:hover {
+    text-decoration: underline;
+    color: #106ebe;
+}
+
+.setup-container .cm-button-link.setup-delete-link,
+.setup-container .cm-button-link.setup-delete-link:hover {
+    color: #a4262c;
+}
+
+/* Space the per-row action links/forms apart. */
+.setup-sites-actions .setup-inline-form + .setup-inline-form {
+    margin-left: 0.75rem;
 }
 
 
-/* Subscriptions list — Setup status pill */
+/* Subscriptions list -- Setup status pill (Fluent palette) */
 .setup-pill {
     display: inline-block;
-    padding: 0.25rem 0.6rem;
-    border-radius: 999px;
-    font-size: 0.8rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 2px;
+    font-size: 0.75rem;
     font-weight: 600;
     text-decoration: none;
-    line-height: 1.2;
+    line-height: 1.3;
     border: 1px solid transparent;
     white-space: nowrap;
 }
@@ -198,21 +353,21 @@
 .setup-pill:hover { text-decoration: none; }
 
 .setup-pill-pending {
-    background: #fef3c7;
-    color: #92400e;
-    border-color: #fcd34d;
+    background: #fff4ce;
+    color: #605e10;
+    border-color: #f2d98a;
 }
 
-.setup-pill-pending:hover { background: #fde68a; }
+.setup-pill-pending:hover { background: #fdecb2; }
 
 .setup-pill-complete {
-    background: #d1fae5;
-    color: #065f46;
-    border-color: #6ee7b7;
+    background: #dff6dd;
+    color: #107c10;
+    border-color: #a7e3a5;
 }
 
-.setup-pill-complete:hover { background: #a7f3d0; }
+.setup-pill-complete:hover { background: #caf0c8; }
 
 .setup-pill-na {
-    color: #9ca3af;
+    color: #a19f9d;
 }

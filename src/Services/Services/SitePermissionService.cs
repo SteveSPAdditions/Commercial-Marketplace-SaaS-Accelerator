@@ -151,6 +151,33 @@ public class SitePermissionService : ISitePermissionService
     public Task ReelevateToManageAsync(SubscriptionSite site, string accessToken, CancellationToken ct)
         => PatchRoleAsync(site.GraphSiteId, site.PermissionId, "manage", accessToken, ct);
 
+    public async Task RevokeAsync(SubscriptionSite site, string accessToken, CancellationToken ct)
+    {
+        // Nothing was ever granted (e.g. a Pending/Failed enrollment) -> nothing to revoke.
+        if (string.IsNullOrWhiteSpace(site.GraphSiteId) || string.IsNullOrWhiteSpace(site.PermissionId))
+        {
+            return;
+        }
+
+        var url = $"{GraphBaseUrl}/sites/{site.GraphSiteId}/permissions/{site.PermissionId}";
+        using var req = new HttpRequestMessage(HttpMethod.Delete, url);
+        req.Headers.TryAddWithoutValidation("Authorization", "Bearer " + accessToken);
+
+        using var resp = await this.httpClient.SendAsync(req, ct).ConfigureAwait(false);
+
+        // Already gone -> treat as success (idempotent delete).
+        if (resp.StatusCode == HttpStatusCode.NotFound)
+        {
+            return;
+        }
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            throw new InvalidOperationException(
+                $"Graph permission DELETE failed for site {site.GraphSiteId} permission {site.PermissionId}: HTTP {(int)resp.StatusCode} -- {Snip(body)}");
+        }
+    }
+
     private async Task PatchRoleAsync(string graphSiteId, string permissionId, string role, string accessToken, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(graphSiteId) || string.IsNullOrWhiteSpace(permissionId))

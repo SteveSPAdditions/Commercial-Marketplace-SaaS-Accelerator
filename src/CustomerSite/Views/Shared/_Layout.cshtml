@@ -59,16 +59,14 @@
     </nav>
     <div class="nav-scroller bg-white shadow-sm cm-menu-bar">
         <nav class="container pb-3 nav nav-underline">
-            <a class="nav-link active">
-                @if (this.User.Identity.IsAuthenticated)
+            @if (this.User.Identity.IsAuthenticated)
+            {
+                <a class="nav-link" asp-area="" asp-controller="Home" asp-action="Index">Home</a>
+                @if (TempData["ShowWelcomeScreen"] != null && Convert.ToString(TempData["ShowWelcomeScreen"]) == "True")
                 {
-                    <a class="nav-link" asp-area="" asp-controller="Home" asp-action="Index">Home</a>
-                    @if (TempData["ShowWelcomeScreen"] != null && Convert.ToString(TempData["ShowWelcomeScreen"]) == "True")
-                    {
-                        <a class="nav-link" asp-area="" asp-controller="Home" asp-action="Subscriptions">Subscriptions</a>
-                    }
+                    <a class="nav-link" asp-area="" asp-controller="Home" asp-action="Subscriptions">Subscriptions</a>
                 }
-            </a>
+            }
         </nav>
     </div>
     <div class="container pb-3">
@@ -102,9 +100,10 @@
     @* <script src="https://cdn.datatables.net/1.10.20/js/dataTables.bootstrap4.min.js" asp-append-version="true"></script> *@
     <script src="~/lib/bootstrap/offcanvas.js"></script>
 
-    @* Ribbon enhancement (fork-safe — no upstream Razor edit).
-       Upstream's empty `<a class="nav-link active">` wrapper is broken HTML, so
-       the active class never lands on a real link. This script:
+    @* Ribbon enhancement.
+       The empty `<a class="nav-link active">` wrapper upstream nested the links
+       inside has been removed — it was invalid (an anchor inside an anchor) and
+       rendered as a stray active underline. This script:
          1. Hides the "Home" link when there's no activation token in the URL —
             without a token, /Home/Index just renders the welcome screen, which
             is useless for an authed user. Once the token is lost, the only

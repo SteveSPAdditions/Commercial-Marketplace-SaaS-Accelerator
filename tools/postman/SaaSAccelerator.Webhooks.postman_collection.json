@@ -1,0 +1,168 @@
+{
+  "info": {
+    "name": "SaaS Accelerator - Fulfillment Webhooks",
+    "description": "Simulates Microsoft Commercial Marketplace Fulfillment API webhook notifications against the CustomerSite endpoint `POST /api/AzureWebhook`.\n\nOne request per WebhookAction handled by WebhookProcessor: Unsubscribe, ChangePlan, ChangeQuantity, Suspend, Reinstate, Renew, and Transfer (which exercises the default/UnknownAction path).\n\nAuth modes (set the `webhookMode` variable):\n- `direct`  : posts the payload with no buffer headers. The endpoint only enforces JWT auth when the app-config `ValidateWebhookJwtToken` is true, so set that to false locally to accept these calls unauthenticated.\n- `buffer`  : adds `X-Webhook-Source: Buffer` and a computed `X-Signature: sha256=<hmac>` header (HMAC-SHA256 lowercase-hex of the raw body, keyed with `hmacSecret` = SaaSApiConfiguration:WebhookBufferHmacSecret). The pre-request script computes this automatically.\n\nEach send generates a fresh `Id` (OperationId) so the endpoint's idempotency guard does not short-circuit repeated tests.\n\nPrerequisites for meaningful processing:\n- The `subscriptionId` must already exist in the accelerator database (handlers reject unknown subscriptions).\n- ChangePlan / ChangeQuantity are only applied when app-config `AcceptSubscriptionUpdates` is true AND the new value differs from `subscription.*` (otherwise treated as a revert / rejected).\n- Reinstate calls back to the real Fulfillment API to PATCH the operation when it is rejected, so test the accept path (`AcceptSubscriptionUpdates` true) unless you have a live operation.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Fresh identifiers per send. Uses named variables (not {{$guid}}) so the value",
+          "// hashed below is identical to the value actually sent (required for HMAC mode).",
+          "pm.collectionVariables.set('opId', pm.variables.replaceIn('{{$guid}}'));",
+          "pm.collectionVariables.set('activityId', pm.variables.replaceIn('{{$guid}}'));",
+          "pm.collectionVariables.set('timeStamp', new Date().toISOString());",
+          "",
+          "// Clean any auth headers left over from a previous run.",
+          "pm.request.headers.remove('X-Webhook-Source');",
+          "pm.request.headers.remove('X-Signature');",
+          "",
+          "var mode = (pm.variables.get('webhookMode') || 'direct').toString().toLowerCase();",
+          "if (mode === 'buffer') {",
+          "    var secret = pm.variables.get('hmacSecret') || '';",
+          "    if (!secret) {",
+          "        console.warn('webhookMode=buffer but hmacSecret is empty; the call will be rejected with 401.');",
+          "    }",
+          "    var CryptoJS = require('crypto-js');",
+          "    // Resolve the body exactly as it will be sent, then sign it.",
+          "    var rawBody = pm.variables.replaceIn(pm.request.body.raw);",
+          "    var sig = CryptoJS.HmacSHA256(rawBody, secret).toString(CryptoJS.enc.Hex);",
+          "    pm.request.headers.add({ key: 'X-Webhook-Source', value: 'Buffer' });",
+          "    pm.request.headers.add({ key: 'X-Signature', value: 'sha256=' + sig });",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('Webhook accepted (HTTP 200)', function () {",
+          "    pm.response.to.have.status(200);",
+          "});",
+          "console.log('Webhook response:', pm.response.code, pm.response.text());"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "https://localhost:5001", "type": "string" },
+    { "key": "webhookMode", "value": "direct", "type": "string" },
+    { "key": "hmacSecret", "value": "", "type": "string" },
+    { "key": "subscriptionId", "value": "00000000-0000-0000-0000-000000000000", "type": "string" },
+    { "key": "subscriptionName", "value": "RAU_SaaS_Trial_1", "type": "string" },
+    { "key": "offerId", "value": "read-and-understood-saas-preview", "type": "string" },
+    { "key": "publisherId", "value": "your-publisher-id", "type": "string" },
+    { "key": "planId", "value": "free-trial", "type": "string" },
+    { "key": "newPlanId", "value": "gold", "type": "string" },
+    { "key": "quantity", "value": "1", "type": "string" },
+    { "key": "newQuantity", "value": "5", "type": "string" },
+    { "key": "opId", "value": "", "type": "string" },
+    { "key": "activityId", "value": "", "type": "string" },
+    { "key": "timeStamp", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Unsubscribe",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/api/AzureWebhook", "host": [ "{{baseUrl}}" ], "path": [ "api", "AzureWebhook" ] },
+        "body": {
+          "mode": "raw",
+          "options": { "raw": { "language": "json" } },
+          "raw": "{\n  \"action\": \"Unsubscribe\",\n  \"activityId\": \"{{activityId}}\",\n  \"subscriptionId\": \"{{subscriptionId}}\",\n  \"offerId\": \"{{offerId}}\",\n  \"publisherId\": \"{{publisherId}}\",\n  \"planId\": \"{{planId}}\",\n  \"quantity\": {{quantity}},\n  \"Id\": \"{{opId}}\",\n  \"status\": \"InProgress\",\n  \"timeStamp\": \"{{timeStamp}}\",\n  \"subscription\": {\n    \"id\": \"{{subscriptionId}}\",\n    \"name\": \"{{subscriptionName}}\",\n    \"offerId\": \"{{offerId}}\",\n    \"planId\": \"{{planId}}\",\n    \"quantity\": {{quantity}},\n    \"saasSubscriptionStatus\": \"Unsubscribed\"\n  }\n}"
+        },
+        "description": "Resource deleted. Handler sets the local subscription status to Unsubscribed and fires notifications."
+      }
+    },
+    {
+      "name": "ChangePlan",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/api/AzureWebhook", "host": [ "{{baseUrl}}" ], "path": [ "api", "AzureWebhook" ] },
+        "body": {
+          "mode": "raw",
+          "options": { "raw": { "language": "json" } },
+          "raw": "{\n  \"action\": \"ChangePlan\",\n  \"activityId\": \"{{activityId}}\",\n  \"subscriptionId\": \"{{subscriptionId}}\",\n  \"offerId\": \"{{offerId}}\",\n  \"publisherId\": \"{{publisherId}}\",\n  \"planId\": \"{{newPlanId}}\",\n  \"quantity\": {{quantity}},\n  \"Id\": \"{{opId}}\",\n  \"status\": \"InProgress\",\n  \"timeStamp\": \"{{timeStamp}}\",\n  \"subscription\": {\n    \"id\": \"{{subscriptionId}}\",\n    \"name\": \"{{subscriptionName}}\",\n    \"offerId\": \"{{offerId}}\",\n    \"planId\": \"{{planId}}\",\n    \"quantity\": {{quantity}},\n    \"saasSubscriptionStatus\": \"Subscribed\"\n  }\n}"
+        },
+        "description": "Top-level planId is the NEW plan ({{newPlanId}}); subscription.planId is the OLD plan ({{planId}}). Applied only when AcceptSubscriptionUpdates=true and the two differ. Set both equal to simulate a revert."
+      }
+    },
+    {
+      "name": "ChangeQuantity",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/api/AzureWebhook", "host": [ "{{baseUrl}}" ], "path": [ "api", "AzureWebhook" ] },
+        "body": {
+          "mode": "raw",
+          "options": { "raw": { "language": "json" } },
+          "raw": "{\n  \"action\": \"ChangeQuantity\",\n  \"activityId\": \"{{activityId}}\",\n  \"subscriptionId\": \"{{subscriptionId}}\",\n  \"offerId\": \"{{offerId}}\",\n  \"publisherId\": \"{{publisherId}}\",\n  \"planId\": \"{{planId}}\",\n  \"quantity\": {{newQuantity}},\n  \"Id\": \"{{opId}}\",\n  \"status\": \"InProgress\",\n  \"timeStamp\": \"{{timeStamp}}\",\n  \"subscription\": {\n    \"id\": \"{{subscriptionId}}\",\n    \"name\": \"{{subscriptionName}}\",\n    \"offerId\": \"{{offerId}}\",\n    \"planId\": \"{{planId}}\",\n    \"quantity\": {{quantity}},\n    \"saasSubscriptionStatus\": \"Subscribed\"\n  }\n}"
+        },
+        "description": "Top-level quantity is the NEW seat count ({{newQuantity}}); subscription.quantity is the OLD count ({{quantity}}). Applied only when AcceptSubscriptionUpdates=true and the two differ."
+      }
+    },
+    {
+      "name": "Suspend",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/api/AzureWebhook", "host": [ "{{baseUrl}}" ], "path": [ "api", "AzureWebhook" ] },
+        "body": {
+          "mode": "raw",
+          "options": { "raw": { "language": "json" } },
+          "raw": "{\n  \"action\": \"Suspend\",\n  \"activityId\": \"{{activityId}}\",\n  \"subscriptionId\": \"{{subscriptionId}}\",\n  \"offerId\": \"{{offerId}}\",\n  \"publisherId\": \"{{publisherId}}\",\n  \"planId\": \"{{planId}}\",\n  \"quantity\": {{quantity}},\n  \"Id\": \"{{opId}}\",\n  \"status\": \"InProgress\",\n  \"timeStamp\": \"{{timeStamp}}\",\n  \"subscription\": {\n    \"id\": \"{{subscriptionId}}\",\n    \"name\": \"{{subscriptionName}}\",\n    \"offerId\": \"{{offerId}}\",\n    \"planId\": \"{{planId}}\",\n    \"quantity\": {{quantity}},\n    \"saasSubscriptionStatus\": \"Subscribed\"\n  }\n}"
+        },
+        "description": "Payment instrument suspended. Handler sets the local subscription status to Suspended."
+      }
+    },
+    {
+      "name": "Reinstate",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/api/AzureWebhook", "host": [ "{{baseUrl}}" ], "path": [ "api", "AzureWebhook" ] },
+        "body": {
+          "mode": "raw",
+          "options": { "raw": { "language": "json" } },
+          "raw": "{\n  \"action\": \"Reinstate\",\n  \"activityId\": \"{{activityId}}\",\n  \"subscriptionId\": \"{{subscriptionId}}\",\n  \"offerId\": \"{{offerId}}\",\n  \"publisherId\": \"{{publisherId}}\",\n  \"planId\": \"{{planId}}\",\n  \"quantity\": {{quantity}},\n  \"Id\": \"{{opId}}\",\n  \"status\": \"InProgress\",\n  \"timeStamp\": \"{{timeStamp}}\",\n  \"subscription\": {\n    \"id\": \"{{subscriptionId}}\",\n    \"name\": \"{{subscriptionName}}\",\n    \"offerId\": \"{{offerId}}\",\n    \"planId\": \"{{planId}}\",\n    \"quantity\": {{quantity}},\n    \"saasSubscriptionStatus\": \"Suspended\"\n  }\n}"
+        },
+        "description": "Suspension cleared. With AcceptSubscriptionUpdates=true and the subscription in the DB the handler sets status back to Subscribed. Otherwise it PATCHes the operation as Failure against the live Fulfillment API (needs a real operation)."
+      }
+    },
+    {
+      "name": "Renew",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/api/AzureWebhook", "host": [ "{{baseUrl}}" ], "path": [ "api", "AzureWebhook" ] },
+        "body": {
+          "mode": "raw",
+          "options": { "raw": { "language": "json" } },
+          "raw": "{\n  \"action\": \"Renew\",\n  \"activityId\": \"{{activityId}}\",\n  \"subscriptionId\": \"{{subscriptionId}}\",\n  \"offerId\": \"{{offerId}}\",\n  \"publisherId\": \"{{publisherId}}\",\n  \"planId\": \"{{planId}}\",\n  \"quantity\": {{quantity}},\n  \"Id\": \"{{opId}}\",\n  \"status\": \"InProgress\",\n  \"timeStamp\": \"{{timeStamp}}\",\n  \"subscription\": {\n    \"id\": \"{{subscriptionId}}\",\n    \"name\": \"{{subscriptionName}}\",\n    \"offerId\": \"{{offerId}}\",\n    \"planId\": \"{{planId}}\",\n    \"quantity\": {{quantity}},\n    \"saasSubscriptionStatus\": \"Subscribed\"\n  }\n}"
+        },
+        "description": "Subscription auto-renewed. Handler logs the renewal (no state change)."
+      }
+    },
+    {
+      "name": "Transfer (unknown/default path)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/api/AzureWebhook", "host": [ "{{baseUrl}}" ], "path": [ "api", "AzureWebhook" ] },
+        "body": {
+          "mode": "raw",
+          "options": { "raw": { "language": "json" } },
+          "raw": "{\n  \"action\": \"Transfer\",\n  \"activityId\": \"{{activityId}}\",\n  \"subscriptionId\": \"{{subscriptionId}}\",\n  \"offerId\": \"{{offerId}}\",\n  \"publisherId\": \"{{publisherId}}\",\n  \"planId\": \"{{planId}}\",\n  \"quantity\": {{quantity}},\n  \"Id\": \"{{opId}}\",\n  \"status\": \"InProgress\",\n  \"timeStamp\": \"{{timeStamp}}\",\n  \"subscription\": {\n    \"id\": \"{{subscriptionId}}\",\n    \"name\": \"{{subscriptionName}}\",\n    \"offerId\": \"{{offerId}}\",\n    \"planId\": \"{{planId}}\",\n    \"quantity\": {{quantity}},\n    \"saasSubscriptionStatus\": \"Subscribed\"\n  }\n}"
+        },
+        "description": "Transfer is a recognised enum value but has no dedicated processor branch, so it falls through to UnknownActionAsync (logged, no state change). Use this request as a template for any unhandled action."
+      }
+    }
+  ]
+}

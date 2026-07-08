@@ -29,6 +29,17 @@
         }
         else
         {
+            <form method="post" action="/Setup/@Model.AmpSubscriptionId/AddSite" class="setup-add-site">
+                @Html.AntiForgeryToken()
+                <div class="setup-input-row">
+                    <label for="sharePointSiteUrl" class="setup-input-label">SharePoint site URL</label>
+                    <input type="url" id="sharePointSiteUrl" name="sharePointSiteUrl" required
+                           placeholder="https://contoso.sharepoint.com/sites/policies"
+                           class="setup-input" />
+                    <button type="submit" class="cm-button-default">Add site</button>
+                </div>
+            </form>
+
             @if (Model.Sites != null && Model.Sites.Count > 0)
             {
                 <table class="setup-sites-table">
@@ -47,7 +58,7 @@
                                 <td>@site.SharePointSiteUrl</td>
                                 <td>@(string.IsNullOrEmpty(site.CurrentRole) ? "—" : site.CurrentRole)</td>
                                 <td>@site.Status</td>
-                                <td>
+                                <td class="setup-sites-actions">
                                     @if (string.IsNullOrEmpty(site.CurrentRole))
                                     {
                                         @* Initial enrollment -> grant Manage by default. *@
@@ -72,6 +83,13 @@
                                             <button type="submit" class="cm-button-link">Switch to Manage</button>
                                         </form>
                                     }
+
+                                    @* Remove the site. Revokes the app's per-site grant, then drops
+                                       the enrollment. Double-confirmed client-side (see setup.js). *@
+                                    <form method="post" action="/Setup/@Model.AmpSubscriptionId/Sites/@site.Id/Delete" class="setup-inline-form" onsubmit="return confirmRemoveSite(this);" data-site-url="@site.SharePointSiteUrl">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="cm-button-link setup-delete-link">Delete</button>
+                                    </form>
                                 </td>
                             </tr>
                         }
@@ -82,17 +100,6 @@
             {
                 <p class="setup-step__meta">No sites enrolled yet.</p>
             }
-
-            <form method="post" action="/Setup/@Model.AmpSubscriptionId/AddSite" class="setup-add-site mt20">
-                @Html.AntiForgeryToken()
-                <div class="setup-input-row">
-                    <label for="sharePointSiteUrl" class="setup-input-label">SharePoint site URL</label>
-                    <input type="url" id="sharePointSiteUrl" name="sharePointSiteUrl" required
-                           placeholder="https://contoso.sharepoint.com/sites/policies"
-                           class="setup-input" />
-                    <button type="submit" class="cm-button-default">Add site</button>
-                </div>
-            </form>
         }
     </div>
 </li>

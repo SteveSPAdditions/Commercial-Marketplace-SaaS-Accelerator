@@ -18,9 +18,6 @@
             <div>
                 <div class="card-body">
                     <div>
-                        <div class="text-start">
-                            <span class="cm-section-heading">Subscriptions</span>
-                        </div>
                         @if (Model.Subscriptions.Count() > 0)
                         {
                             <table id="table" class="table table-bordered dt-responsive cm-table mt20">
@@ -83,6 +80,7 @@
                                                 <div class="nav-item dropdown">
                                                     <a class="nav-link dropdown cm-link-button" href="#" id="dropdown01" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><i class="fa fa-bars"></i></a>
                                                     <div class="dropdown-menu">
+                                                        <a class="dropdown-item cm-dropdown-option" onclick="ViewSubscriptionInfoDetail('@Model.Subscriptions[i].Id')">Details</a>
                                                         @if (setupStatus != null && !setupStatus.IsComplete)
                                                         {
                                                             <a class="dropdown-item cm-dropdown-option" href="@setupStatus.SetupUrl"><strong>Continue setup</strong></a>
@@ -187,6 +185,26 @@
         $.ajax({
             type: "Get",
             url: "SubscriptionQuantityDetail",
+            data: { subscriptionId: subscriptionId },
+            contentType: "application/json; charset=utf-8",
+            datatype: "json",
+            success: function (data) {
+                $('#myModal').html(data);
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('myModal')).show();
+            },
+            error: function () {
+                swal({
+                    title: "Error",
+                    text: "Content load failed.",
+                    icon: "Error"
+                })
+            }
+        });
+    }
+    function ViewSubscriptionInfoDetail(subscriptionId) {
+        $.ajax({
+            type: "Get",
+            url: "SubscriptionInfoDetail",
             data: { subscriptionId: subscriptionId },
             contentType: "application/json; charset=utf-8",
             datatype: "json",

@@ -42,6 +42,16 @@ public interface ISitePermissionService
         SubscriptionSite site,
         string delegatedAccessToken,
         CancellationToken ct);
+
+    /// <summary>
+    /// Delete the runtime app's per-site grant so the app no longer has access to the site.
+    /// Idempotent: a site with no stored grant, or a permission already gone from Graph
+    /// (404), is treated as success.
+    /// </summary>
+    Task RevokeAsync(
+        SubscriptionSite site,
+        string delegatedAccessToken,
+        CancellationToken ct);
 }
 
 /// <summary>Outcome of a grant call.</summary>

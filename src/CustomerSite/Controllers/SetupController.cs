@@ -714,6 +714,111 @@ public class SetupController : BaseController
         return this.RedirectToAction(nameof(Index), new { subscriptionId });
     }
 
+    [HttpPost("/Setup/{subscriptionId:guid}/Sites/{siteId:int}/Delete")]
+    [ValidateAntiForgeryToken]
+    public Task<IActionResult> RemoveSite(Guid subscriptionId, int siteId, CancellationToken ct)
+        => this.RunRemoveSiteOrChallengeAsync(subscriptionId, siteId, ct);
+
+    /// <summary>
+    /// POST wrapper for RemoveSite. Revoking the runtime app's per-site grant needs a delegated
+    /// Graph token; a silent-acquisition failure throws
+    /// <see cref="MicrosoftIdentityWebChallengeUserException"/>, which we hand off to the GET
+    /// <see cref="ResumeRemoveSite"/> action for interactive consent, mirroring the grant flow.
+    /// </summary>
+    private async Task<IActionResult> RunRemoveSiteOrChallengeAsync(Guid subscriptionId, int siteId, CancellationToken ct)
+    {
+        try
+        {
+            return await this.RemoveSiteCoreAsync(subscriptionId, siteId, ct).ConfigureAwait(false);
+        }
+        catch (MicrosoftIdentityWebChallengeUserException)
+        {
+            return this.RedirectToAction(nameof(ResumeRemoveSite), new { subscriptionId, siteId });
+        }
+    }
+
+    /// <summary>
+    /// Post-interactive-consent resume target for RemoveSite. Reached only via redirect from
+    /// <see cref="RunRemoveSiteOrChallengeAsync"/>; [AuthorizeForScopes] drives the sign-in and
+    /// returns the user here, by which point the delegated token is cached and the revoke +
+    /// delete can complete. Access is still gated by the tenant ownership check inside the core.
+    /// </summary>
+    [HttpGet("/Setup/{subscriptionId:guid}/Sites/{siteId:int}/Delete/Resume")]
+    [AuthorizeForScopes(Scopes = new[] { "https://graph.microsoft.com/Sites.FullControl.All" })]
+    public Task<IActionResult> ResumeRemoveSite(Guid subscriptionId, int siteId, CancellationToken ct)
+        => this.RemoveSiteCoreAsync(subscriptionId, siteId, ct);
+
+    /// <summary>
+    /// Revokes the runtime app's per-site grant in Graph (when one exists) and then hard-removes
+    /// the enrollment row. If the revoke fails the row is left intact so the customer can retry --
+    /// we never drop the row while the app could still hold access to the site.
+    /// </summary>
+    private async Task<IActionResult> RemoveSiteCoreAsync(Guid subscriptionId, int siteId, CancellationToken ct)
+    {
+        if (!this.User.Identity.IsAuthenticated)
+        {
+            return this.RedirectToAction("Index", "Home");
+        }
+
+        if (!this.TryAuthorizeSetup(subscriptionId, out _))
+        {
+            return this.SetupAccessDenied();
+        }
+
+        var site = this.siteRepo.Get(siteId);
+        if (site == null || site.AmpSubscriptionId != subscriptionId)
+        {
+            this.TempData["FlashMessage"] = "Site not found.";
+            this.TempData["FlashIsError"] = true;
+            return this.RedirectToAction(nameof(Index), new { subscriptionId });
+        }
+
+        var siteUrl = site.SharePointSiteUrl;
+
+        // Only touch Graph when the runtime app actually holds a grant. A Pending/Failed
+        // enrollment that was never granted has nothing to revoke, so we skip the token
+        // acquisition entirely (and therefore never force an interactive prompt just to
+        // delete a never-granted row).
+        if (!string.IsNullOrWhiteSpace(site.PermissionId) && !string.IsNullOrWhiteSpace(site.GraphSiteId))
+        {
+            string token;
+            try
+            {
+                token = await this.tokenAcquisition
+                    .GetAccessTokenForUserAsync(SitePermissionScopes)
+                    .ConfigureAwait(false);
+            }
+            catch (MicrosoftIdentityWebChallengeUserException)
+            {
+                throw;
+            }
+
+            try
+            {
+                await this.sitePermissionService.RevokeAsync(site, token, ct).ConfigureAwait(false);
+            }
+            catch (MicrosoftIdentityWebChallengeUserException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                this.logger.LogError(HttpUtility.HtmlEncode(
+                    $"Setup site revoke failed: subscription={subscriptionId} site={siteId} {siteUrl}: {ex.Message}"));
+                this.TempData["FlashMessage"] = $"Couldn't remove the app's permission on '{siteUrl}'. Nothing was deleted; please try again.";
+                this.TempData["FlashIsError"] = true;
+                return this.RedirectToAction(nameof(Index), new { subscriptionId });
+            }
+        }
+
+        this.siteRepo.Remove(siteId);
+
+        this.logger.Info(HttpUtility.HtmlEncode(
+            $"Setup site removed: {subscriptionId} {siteUrl} by {this.CurrentUserEmailAddress}"));
+        this.TempData["FlashMessage"] = $"Site '{siteUrl}' removed.";
+        return this.RedirectToAction(nameof(Index), new { subscriptionId });
+    }
+
     [HttpPost("/Setup/{subscriptionId:guid}/Sites/{siteId:int}/Grant")]
     [ValidateAntiForgeryToken]
     public Task<IActionResult> GrantSiteAccess(Guid subscriptionId, int siteId, CancellationToken ct)

@@ -4,8 +4,6 @@
 }
 <link rel="stylesheet" href="~/css/setup.css" asp-append-version="true" />
 
-@await Html.PartialAsync("_BrandLanding")
-
 <div class="container brand-activation setup-container" id="divSetup">
 
     @if (!string.IsNullOrEmpty(Model.FlashMessage))
@@ -15,7 +13,7 @@
         </div>
     }
 
-    <div class="text-white mt20">
+    <div class="mt20">
         <span class="cm-section-heading">@Model.SubscriptionName</span>
         <span class="setup-subhead">Plan @Model.PlanId</span>
     </div>

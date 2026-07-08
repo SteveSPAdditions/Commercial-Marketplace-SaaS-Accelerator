@@ -1,0 +1,45 @@
+@model Marketplace.SaaS.Accelerator.Services.Models.SubscriptionResultExtension
+
+<div>
+    <div class="modal-dialog modal-lg mt200" data-backdrop="static">
+        <div class="modal-content">
+            <div class="modal-header header-bg">
+                <h4><span class="cm-section-heading">Subscription Details</span></h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <dl class="row text-start">
+                    <dt class="col-sm-4 pl80">Customer Email</dt>
+                    <dd class="col-sm-8 pl80">@Html.DisplayFor(model => model.CustomerEmailAddress)</dd>
+
+                    <dt class="col-sm-4 pl80">Customer Name</dt>
+                    <dd class="col-sm-8 pl80">@Html.DisplayFor(model => model.CustomerName)</dd>
+
+                    <dt class="col-sm-4 pl80">ID</dt>
+                    <dd class="col-sm-8 pl80">@Html.DisplayFor(model => model.Id)</dd>
+
+                    <dt class="col-sm-4 pl80">Name</dt>
+                    <dd class="col-sm-8 pl80">@Html.DisplayFor(model => model.Name)</dd>
+
+                    <dt class="col-sm-4 pl80">Status</dt>
+                    <dd class="col-sm-8 pl80">@Html.DisplayFor(model => model.SubscriptionStatus)</dd>
+
+                    <dt class="col-sm-4 pl80">Offer Name</dt>
+                    <dd class="col-sm-8 pl80">@Html.DisplayFor(model => model.OfferId)</dd>
+
+                    <dt class="col-sm-4 pl80">Plan</dt>
+                    <dd class="col-sm-8 pl80">@Html.DisplayFor(model => model.PlanId)</dd>
+
+                    <dt class="col-sm-4 pl80">Purchaser Email</dt>
+                    <dd class="col-sm-8 pl80">@Html.DisplayFor(model => model.Purchaser.EmailId)</dd>
+
+                    <dt class="col-sm-4 pl80">Azure Tenant ID</dt>
+                    <dd class="col-sm-8 pl80">@Html.DisplayFor(model => model.Purchaser.TenantId)</dd>
+                </dl>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn cm-button-default" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
