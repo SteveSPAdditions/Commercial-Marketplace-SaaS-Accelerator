@@ -1,0 +1,33 @@
+@model Marketplace.SaaS.Accelerator.CustomerSite.Models.SetupViewModel
+@{
+    // "Inline" is true when this partial is rendered inside the subscriptions-list
+    // accordion (via the Panel action / AJAX) rather than on the standalone Setup
+    // page. It flows down to the step partials through the shared ViewData so the
+    // OAuth steps can carry a returnTo=list hint on their consent links.
+    var inline = ViewData["Inline"] as bool? == true;
+}
+
+@if (!string.IsNullOrEmpty(Model.FlashMessage))
+{
+    <div class="alert @(Model.FlashIsError ? "alert-danger" : "alert-info") setup-flash" role="alert">
+        @Model.FlashMessage
+    </div>
+}
+
+<div class="setup-preamble">
+    <p>
+        Before Read and Understood can track acknowledgements for this subscription, a tenant
+        administrator completes a few one-time steps that provision the access this app needs in
+        your Microsoft 365 tenant &mdash; choosing where your data is stored, granting consent, and
+        enrolling the SharePoint sites you want covered. You can leave and come back at any time;
+        completed steps are saved automatically.
+    </p>
+</div>
+
+<ol class="setup-checklist" data-subscription-id="@Model.AmpSubscriptionId">
+    @await Html.PartialAsync("_Step1Active", Model)
+    @await Html.PartialAsync("_Step2Region", Model)
+    @await Html.PartialAsync("_Step3Consent", Model)
+    @await Html.PartialAsync("_Step4Sites", Model)
+    @await Html.PartialAsync("_Step5TeamsActivity", Model)
+</ol>

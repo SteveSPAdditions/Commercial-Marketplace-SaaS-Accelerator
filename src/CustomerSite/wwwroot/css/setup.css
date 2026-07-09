@@ -497,3 +497,70 @@
 .setup-pill-na {
     color: #a19f9d;
 }
+
+/* ---- Inline setup accordion (subscriptions list) ---- */
+
+/* Expand toggle in the Setup column: a borderless button wrapping a caret + the pill. */
+.setup-expand-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font: inherit;
+}
+
+.setup-expand-caret {
+    color: #605e5c;
+    font-size: 0.75rem;
+    transition: transform 120ms ease;
+}
+
+.setup-expand-toggle[aria-expanded="true"] .setup-expand-caret {
+    transform: rotate(90deg);
+}
+
+/* Full-width detail row holding the lazy-loaded panel. */
+.setup-detail-row > .setup-detail-cell {
+    padding: 0;
+    background: #faf9f8;
+    border-bottom: 1px solid #e1dfdd;
+}
+
+.setup-inline-panel {
+    position: relative;
+    padding: 20px 24px 8px;
+}
+
+.setup-inline-panel.is-busy {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.setup-inline-panel__loading {
+    color: #605e5c;
+    font-size: 0.875rem;
+    margin: 0.5rem 0;
+}
+
+/* The checklist is left-aligned inside the panel (the list page is otherwise centered). */
+.setup-inline-panel__content.setup-container {
+    margin: 0;
+    text-align: left;
+}
+
+/* ---- Setup preamble (intro copy above the steps) ---- */
+.setup-preamble {
+    font-family: "Segoe UI", "Segoe UI Web (West European)", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif;
+    max-width: 720px;
+    margin-bottom: 1rem;
+}
+
+.setup-preamble p {
+    margin: 0;
+    color: #605e5c;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}

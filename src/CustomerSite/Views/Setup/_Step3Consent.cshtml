@@ -6,6 +6,9 @@
         Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.NotStarted => "state-notstarted",
         _ => "state-locked"
     };
+    // Inline (accordion) consent links carry returnTo=list so the OAuth callback lands back on the
+    // subscriptions list with this panel re-opened, rather than the standalone setup page.
+    var returnToQuery = ViewData["Inline"] as bool? == true ? "?returnTo=list" : "";
 }
 
 <li class="setup-step @stateClass" data-step="consent">
@@ -41,7 +44,7 @@
             </p>
             <p class="setup-step__hint">
                 Consent removed or revoked in Microsoft Entra? Site permissions will start failing.
-                <a href="/Setup/@Model.AmpSubscriptionId/Consent">Re-grant tenant consent</a>.
+                <a href="/Setup/@Model.AmpSubscriptionId/Consent@(returnToQuery)">Re-grant tenant consent</a>.
             </p>
         }
         else
@@ -49,7 +52,7 @@
             <p class="setup-step__meta">
                 Grant tenant-wide consent so the Read and Understood runtime can be installed on the SharePoint sites you choose.
             </p>
-            <a class="cm-button-default" href="/Setup/@Model.AmpSubscriptionId/Consent">
+            <a class="cm-button-default" href="/Setup/@Model.AmpSubscriptionId/Consent@(returnToQuery)">
                 Grant tenant consent
             </a>
         }

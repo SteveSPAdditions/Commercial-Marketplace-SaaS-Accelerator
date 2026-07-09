@@ -403,13 +403,16 @@ public class HomeController : BaseController
     /// Subscription this instance.
     /// </summary>
     /// <returns> Subscription instance.</returns>
-    public IActionResult Subscriptions()
+    public IActionResult Subscriptions(Guid? expand = null)
     {
         this.logger.Info("Home Controller / Subscriptions ");
         try
         {
             if (this.User.Identity.IsAuthenticated)
             {
+                // Which subscription's inline setup panel to auto-open (e.g. after returning from an
+                // OAuth consent flow that began in the list). The view lazy-loads that panel on load.
+                this.ViewBag.ExpandSubscriptionId = expand;
                 this.TempData["ShowWelcomeScreen"] = "True";
                 SubscriptionViewModel subscriptionDetail = new SubscriptionViewModel();
                 subscriptionDetail.Subscriptions = this.subscriptionService.GetPartnerSubscription(this.CurrentUserEmailAddress, default, true).ToList();

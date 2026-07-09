@@ -136,6 +136,51 @@ public class SetupController : BaseController
             return this.SetupAccessDenied();
         }
 
+        var vm = await this.BuildSetupViewModelAsync(subscriptionId, subscription, ct).ConfigureAwait(false);
+
+        if (this.TempData["FlashMessage"] is string flash)
+        {
+            vm.FlashMessage = flash;
+            vm.FlashIsError = this.TempData["FlashIsError"] is bool b && b;
+        }
+
+        return this.View(vm);
+    }
+
+    /// <summary>
+    /// Renders the setup checklist as a partial for inline embedding in the subscriptions-list
+    /// accordion. Lazy-loaded via AJAX on first expand, and re-fetched by the client while a
+    /// step is propagating (in place of the standalone page's full reload).
+    /// </summary>
+    [HttpGet("/Setup/{subscriptionId:guid}/Panel")]
+    public async Task<IActionResult> Panel(Guid subscriptionId, CancellationToken ct)
+    {
+        if (!this.User.Identity.IsAuthenticated)
+        {
+            return this.Unauthorized();
+        }
+
+        if (!this.TryAuthorizeSetup(subscriptionId, out var subscription))
+        {
+            return this.NotFound();
+        }
+
+        var vm = await this.BuildSetupViewModelAsync(subscriptionId, subscription, ct).ConfigureAwait(false);
+        return this.SetupPanel(vm);
+    }
+
+    /// <summary>
+    /// Builds the full <see cref="SetupViewModel"/> for a subscription: queries Function1 for the
+    /// tenant region (the authority, self-healing the stored value), then derives each step's state
+    /// from the persisted consent + site rows. Shared by the standalone page (<see cref="Index"/>),
+    /// the inline <see cref="Panel"/>, and the AJAX action responses. Expensive (a network call and
+    /// a possible DB write), so it runs once per subscription on demand -- never eagerly for a list.
+    /// </summary>
+    private async Task<SetupViewModel> BuildSetupViewModelAsync(
+        Guid subscriptionId,
+        Marketplace.SaaS.Accelerator.DataAccess.Entities.Subscriptions subscription,
+        CancellationToken ct)
+    {
         var tenantId = subscription.PurchaserTenantId ?? Guid.Empty;
         var consent = this.consentRepo.GetByAmpSubscriptionId(subscriptionId);
         var sites = this.siteRepo.ListBySubscription(subscriptionId).ToList();
@@ -300,18 +345,82 @@ public class SetupController : BaseController
             GrantedByUpn = consent?.TeamsActivityConsentedByUpn,
         };
 
-        if (this.TempData["FlashMessage"] is string flash)
+        return vm;
+    }
+
+    /// <summary>
+    /// Renders the inline setup checklist partial, flagging the ViewData so the step partials
+    /// know they're embedded in the subscriptions list (and carry a returnTo=list hint on their
+    /// OAuth links). Used for the lazy-load, the polling refresh, and AJAX action responses.
+    /// </summary>
+    private IActionResult SetupPanel(SetupViewModel vm)
+    {
+        this.ViewData["Inline"] = true;
+        return this.PartialView("_SetupChecklist", vm);
+    }
+
+    /// <summary>True when the request came from the inline accordion's fetch() calls.</summary>
+    private bool IsAjaxRequest() =>
+        string.Equals(this.Request.Headers["X-Requested-With"], "XMLHttpRequest", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Terminal result for a mutating setup action, given the result its core produced. For a
+    /// normal request the core's result (a PRG redirect to the standalone page) is returned
+    /// unchanged. For an inline (AJAX) request: the normal redirect-to-<see cref="Index"/> is
+    /// converted to an in-place re-render of the checklist partial (lifting any TempData flash the
+    /// action set onto the model), and any OTHER redirect -- an auth bounce or an interactive-consent
+    /// resume -- is handed to the client as a JSON { requiresRedirect, url } to navigate to as a full
+    /// page (an XHR can't follow a 302 into the Microsoft sign-in flow).
+    /// </summary>
+    private async Task<IActionResult> FinishInlineAsync(Guid subscriptionId, IActionResult coreResult, CancellationToken ct)
+    {
+        if (!this.IsAjaxRequest())
         {
-            vm.FlashMessage = flash;
-            vm.FlashIsError = this.TempData["FlashIsError"] is bool b && b;
+            return coreResult;
         }
 
-        return this.View(vm);
+        if (coreResult is RedirectToActionResult rr
+            && rr.ControllerName == null
+            && string.Equals(rr.ActionName, nameof(Index), StringComparison.Ordinal)
+            && this.TryAuthorizeSetup(subscriptionId, out var subscription))
+        {
+            var vm = await this.BuildSetupViewModelAsync(subscriptionId, subscription, ct).ConfigureAwait(false);
+            if (this.TempData["FlashMessage"] is string flash)
+            {
+                vm.FlashMessage = flash;
+                vm.FlashIsError = this.TempData["FlashIsError"] is bool b && b;
+            }
+
+            return this.SetupPanel(vm);
+        }
+
+        return this.InlineRedirectJson(coreResult);
+    }
+
+    /// <summary>
+    /// Wraps a redirect as a JSON { requiresRedirect, url } so the inline accordion's fetch() can
+    /// perform it as a full-page navigation (used for interactive-consent resume and auth bounces).
+    /// </summary>
+    private IActionResult InlineRedirectJson(IActionResult redirect)
+    {
+        var url = redirect switch
+        {
+            RedirectToActionResult r => this.Url.Action(r.ActionName, r.ControllerName, r.RouteValues),
+            RedirectResult rd => rd.Url,
+            _ => null,
+        };
+        return this.Json(new { requiresRedirect = true, url = url ?? this.Url.Action(nameof(Index), new { }) });
     }
 
     [HttpPost("/Setup/{subscriptionId:guid}/Region")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Region(Guid subscriptionId, string azureRegion, CancellationToken ct)
+    {
+        var result = await this.RegionCoreAsync(subscriptionId, azureRegion, ct).ConfigureAwait(false);
+        return await this.FinishInlineAsync(subscriptionId, result, ct).ConfigureAwait(false);
+    }
+
+    private async Task<IActionResult> RegionCoreAsync(Guid subscriptionId, string azureRegion, CancellationToken ct)
     {
         if (!this.User.Identity.IsAuthenticated)
         {
@@ -380,7 +489,7 @@ public class SetupController : BaseController
     }
 
     [HttpGet("/Setup/{subscriptionId:guid}/Consent")]
-    public IActionResult Consent(Guid subscriptionId)
+    public IActionResult Consent(Guid subscriptionId, string returnTo = null)
     {
         if (!this.User.Identity.IsAuthenticated)
         {
@@ -392,12 +501,20 @@ public class SetupController : BaseController
             return this.SetupAccessDenied();
         }
 
+        // Remember whether the flow began in the subscriptions-list accordion so the callback can
+        // return the user there. TempData survives the external round-trip to Microsoft (cookie-backed).
+        var toList = string.Equals(returnTo, "list", StringComparison.OrdinalIgnoreCase);
+        if (toList)
+        {
+            this.TempData["SetupConsentReturnList"] = true;
+        }
+
         var tenantId = subscription.PurchaserTenantId ?? Guid.Empty;
         if (tenantId == Guid.Empty)
         {
             this.TempData["FlashMessage"] = "This subscription has no tenant id; contact support.";
             this.TempData["FlashIsError"] = true;
-            return this.RedirectToAction(nameof(Index), new { subscriptionId });
+            return this.RedirectAfterSetupFlow(subscriptionId, toList);
         }
 
         var callbackUri = $"{this.Request.Scheme}://{this.Request.Host}/api/setup/consent-callback";
@@ -411,11 +528,30 @@ public class SetupController : BaseController
             this.logger.LogError($"BuildConsentUrl failed: {ex.Message}");
             this.TempData["FlashMessage"] = "Tenant consent is not configured on this Accelerator. Contact support.";
             this.TempData["FlashIsError"] = true;
-            return this.RedirectToAction(nameof(Index), new { subscriptionId });
+            return this.RedirectAfterSetupFlow(subscriptionId, toList);
         }
 
         return this.Redirect(url);
     }
+
+    /// <summary>
+    /// Synchronous redirect target for the consent/teams GET actions: back to the subscriptions
+    /// list (panel re-opened) when the flow began there, otherwise the standalone setup page.
+    /// </summary>
+    private IActionResult RedirectAfterSetupFlow(Guid subscriptionId, bool toList)
+        => toList
+            ? this.RedirectToAction("Subscriptions", "Home", new { expand = subscriptionId })
+            : this.RedirectToAction(nameof(Index), new { subscriptionId });
+
+    /// <summary>
+    /// Post-callback redirect target for the OAuth consent flows: honours the returnTo=list hint
+    /// stashed in TempData by the originating GET (consumed here), so the user lands back where
+    /// the flow began.
+    /// </summary>
+    private IActionResult RedirectAfterConsentCallback(Guid subscriptionId)
+        => this.TempData["SetupConsentReturnList"] is bool b && b
+            ? this.RedirectToAction("Subscriptions", "Home", new { expand = subscriptionId })
+            : this.RedirectToAction(nameof(Index), new { subscriptionId });
 
     [HttpGet("/api/setup/consent-callback")]
     public async Task<IActionResult> ConsentCallback(
@@ -444,7 +580,7 @@ public class SetupController : BaseController
             this.logger.LogError($"Consent callback error for {subscriptionId}: {error} - {error_description}");
             this.TempData["FlashMessage"] = $"Consent was not granted: {error}";
             this.TempData["FlashIsError"] = true;
-            return this.RedirectToAction(nameof(Index), new { subscriptionId = subscriptionId.Value });
+            return this.RedirectAfterConsentCallback(subscriptionId.Value);
         }
 
         var granted = string.Equals(admin_consent, "True", StringComparison.OrdinalIgnoreCase);
@@ -452,7 +588,7 @@ public class SetupController : BaseController
         {
             this.TempData["FlashMessage"] = "Consent was not granted.";
             this.TempData["FlashIsError"] = true;
-            return this.RedirectToAction(nameof(Index), new { subscriptionId = subscriptionId.Value });
+            return this.RedirectAfterConsentCallback(subscriptionId.Value);
         }
 
         await this.consentService.RecordConsentAsync(
@@ -462,11 +598,11 @@ public class SetupController : BaseController
             ct).ConfigureAwait(false);
 
         this.TempData["FlashMessage"] = "Tenant consent recorded.";
-        return this.RedirectToAction(nameof(Index), new { subscriptionId = subscriptionId.Value });
+        return this.RedirectAfterConsentCallback(subscriptionId.Value);
     }
 
     [HttpGet("/Setup/{subscriptionId:guid}/TeamsActivity")]
-    public IActionResult TeamsActivity(Guid subscriptionId)
+    public IActionResult TeamsActivity(Guid subscriptionId, string returnTo = null)
     {
         if (!this.User.Identity.IsAuthenticated)
         {
@@ -478,12 +614,18 @@ public class SetupController : BaseController
             return this.SetupAccessDenied();
         }
 
+        var toList = string.Equals(returnTo, "list", StringComparison.OrdinalIgnoreCase);
+        if (toList)
+        {
+            this.TempData["SetupConsentReturnList"] = true;
+        }
+
         var tenantId = subscription.PurchaserTenantId ?? Guid.Empty;
         if (tenantId == Guid.Empty)
         {
             this.TempData["FlashMessage"] = "This subscription has no tenant id; contact support.";
             this.TempData["FlashIsError"] = true;
-            return this.RedirectToAction(nameof(Index), new { subscriptionId });
+            return this.RedirectAfterSetupFlow(subscriptionId, toList);
         }
 
         var callbackUri = $"{this.Request.Scheme}://{this.Request.Host}/api/setup/teams-consent-callback";
@@ -497,7 +639,7 @@ public class SetupController : BaseController
             this.logger.LogError($"BuildTeamsActivityConsentUrl failed: {ex.Message}");
             this.TempData["FlashMessage"] = "The Teams activity app is not configured on this Accelerator. Contact support.";
             this.TempData["FlashIsError"] = true;
-            return this.RedirectToAction(nameof(Index), new { subscriptionId });
+            return this.RedirectAfterSetupFlow(subscriptionId, toList);
         }
 
         return this.Redirect(url);
@@ -530,7 +672,7 @@ public class SetupController : BaseController
             this.logger.LogError($"Teams consent callback error for {subscriptionId}: {error} - {error_description}");
             this.TempData["FlashMessage"] = $"Teams activity consent was not granted: {error}";
             this.TempData["FlashIsError"] = true;
-            return this.RedirectToAction(nameof(Index), new { subscriptionId = subscriptionId.Value });
+            return this.RedirectAfterConsentCallback(subscriptionId.Value);
         }
 
         var granted = string.Equals(admin_consent, "True", StringComparison.OrdinalIgnoreCase);
@@ -538,7 +680,7 @@ public class SetupController : BaseController
         {
             this.TempData["FlashMessage"] = "Teams activity consent was not granted.";
             this.TempData["FlashIsError"] = true;
-            return this.RedirectToAction(nameof(Index), new { subscriptionId = subscriptionId.Value });
+            return this.RedirectAfterConsentCallback(subscriptionId.Value);
         }
 
         await this.consentService.RecordTeamsActivityConsentAsync(
@@ -548,7 +690,7 @@ public class SetupController : BaseController
             ct).ConfigureAwait(false);
 
         this.TempData["FlashMessage"] = "Teams activity app consent recorded.";
-        return this.RedirectToAction(nameof(Index), new { subscriptionId = subscriptionId.Value });
+        return this.RedirectAfterConsentCallback(subscriptionId.Value);
     }
 
     [HttpGet("/Setup/{subscriptionId:guid}/Status.json")]
@@ -597,11 +739,13 @@ public class SetupController : BaseController
     {
         try
         {
-            return await this.AddSiteCoreAsync(subscriptionId, sharePointSiteUrl, ct).ConfigureAwait(false);
+            var result = await this.AddSiteCoreAsync(subscriptionId, sharePointSiteUrl, ct).ConfigureAwait(false);
+            return await this.FinishInlineAsync(subscriptionId, result, ct).ConfigureAwait(false);
         }
         catch (MicrosoftIdentityWebChallengeUserException)
         {
-            return this.RedirectToAction(nameof(ResumeAddSite), new { subscriptionId, sharePointSiteUrl });
+            var resume = this.RedirectToAction(nameof(ResumeAddSite), new { subscriptionId, sharePointSiteUrl });
+            return this.IsAjaxRequest() ? this.InlineRedirectJson(resume) : resume;
         }
     }
 
@@ -729,11 +873,13 @@ public class SetupController : BaseController
     {
         try
         {
-            return await this.RemoveSiteCoreAsync(subscriptionId, siteId, ct).ConfigureAwait(false);
+            var result = await this.RemoveSiteCoreAsync(subscriptionId, siteId, ct).ConfigureAwait(false);
+            return await this.FinishInlineAsync(subscriptionId, result, ct).ConfigureAwait(false);
         }
         catch (MicrosoftIdentityWebChallengeUserException)
         {
-            return this.RedirectToAction(nameof(ResumeRemoveSite), new { subscriptionId, siteId });
+            var resume = this.RedirectToAction(nameof(ResumeRemoveSite), new { subscriptionId, siteId });
+            return this.IsAjaxRequest() ? this.InlineRedirectJson(resume) : resume;
         }
     }
 
@@ -850,11 +996,13 @@ public class SetupController : BaseController
     {
         try
         {
-            return await this.TransitionSiteRoleAsync(subscriptionId, siteId, transition, ct).ConfigureAwait(false);
+            var result = await this.TransitionSiteRoleAsync(subscriptionId, siteId, transition, ct).ConfigureAwait(false);
+            return await this.FinishInlineAsync(subscriptionId, result, ct).ConfigureAwait(false);
         }
         catch (MicrosoftIdentityWebChallengeUserException)
         {
-            return this.RedirectToAction(nameof(ResumeSiteTransition), new { subscriptionId, siteId, transition = transition.ToString() });
+            var resume = this.RedirectToAction(nameof(ResumeSiteTransition), new { subscriptionId, siteId, transition = transition.ToString() });
+            return this.IsAjaxRequest() ? this.InlineRedirectJson(resume) : resume;
         }
     }
 

@@ -6,25 +6,14 @@
 
 <div class="container brand-activation setup-container" id="divSetup">
 
-    @if (!string.IsNullOrEmpty(Model.FlashMessage))
-    {
-        <div class="alert @(Model.FlashIsError ? "alert-danger" : "alert-info") setup-flash" role="alert">
-            @Model.FlashMessage
-        </div>
-    }
-
     <div class="mt20">
         <span class="cm-section-heading">@Model.SubscriptionName</span>
         <span class="setup-subhead">Plan @Model.PlanId</span>
     </div>
 
-    <ol class="setup-checklist mt20" data-subscription-id="@Model.AmpSubscriptionId">
-        @await Html.PartialAsync("_Step1Active", Model)
-        @await Html.PartialAsync("_Step2Region", Model)
-        @await Html.PartialAsync("_Step3Consent", Model)
-        @await Html.PartialAsync("_Step4Sites", Model)
-        @await Html.PartialAsync("_Step5TeamsActivity", Model)
-    </ol>
+    <div class="mt20">
+        @await Html.PartialAsync("_SetupChecklist", Model)
+    </div>
 </div>
 
 @section Scripts {

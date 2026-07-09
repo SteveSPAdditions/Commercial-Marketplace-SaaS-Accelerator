@@ -14,7 +14,14 @@
                 <strong>Error!</strong> @Model.ErrorMessage
             </div>
         }
-        <form method="post">
+        @if (TempData["FlashMessage"] is string setupFlash)
+        {
+            <div class="alert @(TempData["FlashIsError"] is bool fe && fe ? "alert-danger" : "alert-info") setup-flash text-left" role="alert">@setupFlash</div>
+        }
+        @{
+            var expandId = ViewBag.ExpandSubscriptionId as Guid?;
+        }
+        <div class="cm-subscriptions-wrap">
             <div>
                 <div class="card-body">
                     <div>
@@ -36,6 +43,8 @@
                                     @for (var i = 0; i < Model.Subscriptions.Count; i++)
                                     {
                                         var subscription = Model.Subscriptions[i];
+                                        var detailRowId = "setup-detail-" + subscription.Id;
+                                        var isRowExpanded = expandId == subscription.Id;
                                         <tr>
                                             <td class="text-left">
                                                 @Html.HiddenFor(s => s.Subscriptions[i].Id)
@@ -67,13 +76,19 @@
                                                 {
                                                     <span class="setup-pill-na">&mdash;</span>
                                                 }
-                                                else if (setupStatus.IsComplete)
-                                                {
-                                                    <a href="@setupStatus.SetupUrl" class="setup-pill setup-pill-complete" title="Setup complete">Setup: complete</a>
-                                                }
                                                 else
                                                 {
-                                                    <a href="@setupStatus.SetupUrl" class="setup-pill setup-pill-pending" title="Continue setup">Setup: @setupStatus.CompletedSteps of @setupStatus.TotalSteps</a>
+                                                    <button type="button" class="setup-expand-toggle" data-target="@detailRowId" data-panel-url="/Setup/@subscription.Id/Panel" aria-expanded="@(isRowExpanded ? "true" : "false")" title="Show setup steps">
+                                                        <i class="fa fa-chevron-right setup-expand-caret" aria-hidden="true"></i>
+                                                        @if (setupStatus.IsComplete)
+                                                        {
+                                                            <span class="setup-pill setup-pill-complete">Setup: complete</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="setup-pill setup-pill-pending">Setup: @setupStatus.CompletedSteps of @setupStatus.TotalSteps</span>
+                                                        }
+                                                    </button>
                                                 }
                                             </td>
                                             <td class="text-left  cm-ellipsis">
@@ -83,7 +98,7 @@
                                                         <a class="dropdown-item cm-dropdown-option" onclick="ViewSubscriptionInfoDetail('@Model.Subscriptions[i].Id')">Details</a>
                                                         @if (setupStatus != null && !setupStatus.IsComplete)
                                                         {
-                                                            <a class="dropdown-item cm-dropdown-option" href="@setupStatus.SetupUrl"><strong>Continue setup</strong></a>
+                                                            <a class="dropdown-item cm-dropdown-option setup-expand-link" data-target="@detailRowId" data-panel-url="/Setup/@subscription.Id/Panel" href="@setupStatus.SetupUrl"><strong>Continue setup</strong></a>
                                                         }
                                                         @if (subscription.SubscriptionStatus == SubscriptionStatusEnumExtension.Subscribed)
                                                         {
@@ -108,7 +123,7 @@
                                                         }
                                                         @if (setupStatus != null && setupStatus.IsComplete)
                                                         {
-                                                            <a class="dropdown-item cm-dropdown-option" href="@setupStatus.SetupUrl">Setup (review)</a>
+                                                            <a class="dropdown-item cm-dropdown-option setup-expand-link" data-target="@detailRowId" data-panel-url="/Setup/@subscription.Id/Panel" href="@setupStatus.SetupUrl">Setup (review)</a>
                                                         }
                                                         <a class="dropdown-item cm-dropdown-option" onclick="ViewSubscriptionlogdetailsById('@Model.Subscriptions[i].Id')">Activity Log</a>
 
@@ -117,6 +132,18 @@
                                                 </div>
                                             </td>
                                         </tr>
+                                        @if (setupStatus != null)
+                                        {
+                                            <tr class="setup-detail-row" id="@detailRowId" @(isRowExpanded ? Html.Raw("") : Html.Raw("hidden"))>
+                                                <td colspan="7" class="setup-detail-cell">
+                                                    <div class="setup-inline-panel" data-panel-url="/Setup/@subscription.Id/Panel" data-loaded="false">
+                                                        <div class="setup-inline-panel__content setup-container">
+                                                            <p class="setup-inline-panel__loading"><i class="fa fa-circle-o-notch fa-spin"></i> Loading setup&hellip;</p>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
                                     }
                                 </tbody>
                             </table>
@@ -164,8 +191,8 @@
             </div>
 
 
-            
-        </form>
+
+        </div>
     </div>
 </div>
 
@@ -180,6 +207,8 @@
 
 
 </script> *@
+<script src="~/js/setup.js" asp-append-version="true"></script>
+<script src="~/js/setup-inline.js" asp-append-version="true"></script>
 <script>
     function ViewSubscriptionQuantityDetail(subscriptionId) {
         $.ajax({

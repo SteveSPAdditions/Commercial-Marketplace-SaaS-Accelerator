@@ -161,6 +161,10 @@ document.addEventListener('submit', function (e) {
     var form = e.target;
     if (!form || !form.getAttribute || !form.hasAttribute('data-confirm')) return;
 
+    // Inside the subscriptions-list accordion, setup-inline.js handles the confirm + AJAX
+    // submit; this native-submit gating is only for the standalone Setup page.
+    if (form.closest && form.closest('.setup-inline-panel')) return;
+
     var opts = setupConfirmOptions(form);
     if (!opts) return;
 
