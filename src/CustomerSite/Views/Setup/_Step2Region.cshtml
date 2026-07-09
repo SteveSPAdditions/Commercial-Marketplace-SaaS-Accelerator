@@ -41,11 +41,7 @@
                     <text> &middot; selected @picker.SelectedUtc.Value.ToString("yyyy-MM-dd") by @picker.SelectedByUpn</text>
                 }
             </p>
-            @if (picker.FanOutComplete)
-            {
-                <p class="setup-step__hint">Propagated to all regions.</p>
-            }
-            else
+            @if (!picker.FanOutComplete)
             {
                 <p class="setup-step__hint setup-step__hint--inflight">
                     <i class="fa fa-circle-o-notch fa-spin"></i>

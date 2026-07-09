@@ -50,34 +50,122 @@
     schedule();
 })();
 
-// Step 4 -- Switch to Read confirmation.
-// Manage is the default permission for newly granted sites because it lets the
-// customer enable libraries from this app. Switching to Read restricts the app
-// to read-only operations, which means the customer can no longer enable
-// libraries (or make other admin-grade changes) until they switch back. We warn
-// once, on submit; the customer can still choose Read if they want -- by design,
-// not least-privilege-by-default, per UX direction.
-function confirmSwitchToRead() {
-    return confirm(
-        'Switching to Read means this app will no longer be able to enable libraries ' +
-        'or make administrative changes on this site. You can switch back to Manage ' +
-        'whenever you need to make admin changes.\n\nContinue?'
-    );
+// ---------------------------------------------------------------------------
+// Fluent-styled confirmation dialog.
+// The setup page has no Fluent UI (React) runtime -- it's server-rendered MVC --
+// so this is a lightweight modal that echoes the Azure/Fluent look already used
+// across setup.css (Segoe UI, #0078d4, 2px corners, overlay scrim). Replaces the
+// native window.confirm() prompts. Returns a Promise<boolean>.
+function setupConfirm(opts) {
+    return new Promise(function (resolve) {
+        var lastFocused = document.activeElement;
+
+        var overlay = document.createElement('div');
+        overlay.className = 'setup-dialog-overlay';
+
+        var dialog = document.createElement('div');
+        dialog.className = 'setup-dialog';
+        dialog.setAttribute('role', 'alertdialog');
+        dialog.setAttribute('aria-modal', 'true');
+        dialog.setAttribute('aria-labelledby', 'setup-dialog-title');
+
+        var title = document.createElement('h2');
+        title.className = 'setup-dialog__title';
+        title.id = 'setup-dialog-title';
+        title.textContent = opts.title;
+
+        var body = document.createElement('p');
+        body.className = 'setup-dialog__body';
+        body.textContent = opts.message;
+
+        var footer = document.createElement('div');
+        footer.className = 'setup-dialog__footer';
+
+        var cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'setup-dialog__btn setup-dialog__btn--secondary';
+        cancelBtn.textContent = opts.cancelText || 'Cancel';
+
+        var confirmBtn = document.createElement('button');
+        confirmBtn.type = 'button';
+        confirmBtn.className = 'setup-dialog__btn ' +
+            (opts.destructive ? 'setup-dialog__btn--danger' : 'setup-dialog__btn--primary');
+        confirmBtn.textContent = opts.confirmText || 'OK';
+
+        footer.appendChild(cancelBtn);
+        footer.appendChild(confirmBtn);
+        dialog.appendChild(title);
+        dialog.appendChild(body);
+        dialog.appendChild(footer);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+
+        confirmBtn.focus();
+
+        function close(result) {
+            document.removeEventListener('keydown', onKey);
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            if (lastFocused && lastFocused.focus) lastFocused.focus();
+            resolve(result);
+        }
+
+        function onKey(e) {
+            if (e.key === 'Escape') { close(false); }
+        }
+
+        cancelBtn.addEventListener('click', function () { close(false); });
+        confirmBtn.addEventListener('click', function () { close(true); });
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) { close(false); }
+        });
+        document.addEventListener('keydown', onKey);
+    });
 }
 
-// Step 4 -- Delete site (double confirmation).
-// Deleting revokes Read and Understood's per-site permission and removes the site
-// from setup. It's destructive and not easily undone (the site has to be re-added
-// and re-granted), so we confirm twice: an explanatory first prompt, then a final
-// "are you sure" gate. Both must be accepted for the form to submit.
-function confirmRemoveSite(form) {
-    var url = (form && form.getAttribute('data-site-url')) || 'this site';
-    if (!confirm(
-        'Remove "' + url + '"?\n\n' +
-        'Read and Understood\'s permission on this site will be revoked and the site ' +
-        'will be removed from setup. Acknowledgement tracking on this site will stop.'
-    )) {
-        return false;
+// Wording for each confirmed action. Keyed by the form's data-confirm value.
+//  - switch-read: Manage is the default for newly granted sites (lets the customer
+//    enable libraries). Read is read-only, so enable-library and other admin-grade
+//    changes stop until they switch back. Warn, but allow -- by UX direction.
+//  - remove-site: revokes the per-site grant and drops the enrollment. Destructive
+//    and not easily undone (re-add + re-grant), so the primary button is danger-styled.
+function setupConfirmOptions(form) {
+    var kind = form.getAttribute('data-confirm');
+    if (kind === 'switch-read') {
+        return {
+            title: 'Switch to Read?',
+            message: 'Read means this app will no longer be able to enable libraries or ' +
+                'make administrative changes on this site. You can switch back to Manage ' +
+                'whenever you need to make admin changes.',
+            confirmText: 'Switch to Read',
+            destructive: false
+        };
     }
-    return confirm('This cannot be undone. Remove "' + url + '" for certain?');
+    if (kind === 'remove-site') {
+        var url = form.getAttribute('data-site-url') || 'this site';
+        return {
+            title: 'Remove site?',
+            message: 'Read and Understood\'s permission on "' + url + '" will be revoked and ' +
+                'the site will be removed from setup. Acknowledgement tracking on this site ' +
+                'will stop. This cannot be undone.',
+            confirmText: 'Remove site',
+            destructive: true
+        };
+    }
+    return null;
 }
+
+// Intercept submits of any [data-confirm] form, gate them behind the Fluent dialog,
+// and re-submit on confirm. form.submit() bypasses this listener (it fires no submit
+// event), so there is no recursion.
+document.addEventListener('submit', function (e) {
+    var form = e.target;
+    if (!form || !form.getAttribute || !form.hasAttribute('data-confirm')) return;
+
+    var opts = setupConfirmOptions(form);
+    if (!opts) return;
+
+    e.preventDefault();
+    setupConfirm(opts).then(function (ok) {
+        if (ok) { form.submit(); }
+    });
+});

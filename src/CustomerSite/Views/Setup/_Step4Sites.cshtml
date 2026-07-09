@@ -69,8 +69,8 @@
                                     }
                                     else if (string.Equals(site.CurrentRole, "manage", StringComparison.OrdinalIgnoreCase))
                                     {
-                                        @* On Manage -> offer to drop to Read. Confirmation explains the limitation. *@
-                                        <form method="post" action="/Setup/@Model.AmpSubscriptionId/Sites/@site.Id/SwitchToRead" class="setup-inline-form" onsubmit="return confirmSwitchToRead();">
+                                        @* On Manage -> offer to drop to Read. Confirmation (Fluent dialog, see setup.js) explains the limitation. *@
+                                        <form method="post" action="/Setup/@Model.AmpSubscriptionId/Sites/@site.Id/SwitchToRead" class="setup-inline-form" data-confirm="switch-read">
                                             @Html.AntiForgeryToken()
                                             <button type="submit" class="cm-button-link">Switch to Read</button>
                                         </form>
@@ -85,10 +85,12 @@
                                     }
 
                                     @* Remove the site. Revokes the app's per-site grant, then drops
-                                       the enrollment. Double-confirmed client-side (see setup.js). *@
-                                    <form method="post" action="/Setup/@Model.AmpSubscriptionId/Sites/@site.Id/Delete" class="setup-inline-form" onsubmit="return confirmRemoveSite(this);" data-site-url="@site.SharePointSiteUrl">
+                                       the enrollment. Confirmed client-side via Fluent dialog (see setup.js). *@
+                                    <form method="post" action="/Setup/@Model.AmpSubscriptionId/Sites/@site.Id/Delete" class="setup-inline-form" data-confirm="remove-site" data-site-url="@site.SharePointSiteUrl">
                                         @Html.AntiForgeryToken()
-                                        <button type="submit" class="cm-button-link setup-delete-link">Delete</button>
+                                        <button type="submit" class="cm-button-icon setup-delete-link" title="Remove site" aria-label="Remove site">
+                                            <i class="fa fa-trash-o" aria-hidden="true"></i>
+                                        </button>
                                     </form>
                                 </td>
                             </tr>
