@@ -9,7 +9,11 @@
       "Bash(ls deployment/*.ps1)",
       "Bash(az account *)",
       "PowerShell($m = Get-Command Invoke-Sqlcmd -ErrorAction SilentlyContinue; if \\($m\\) { \"Invoke-Sqlcmd available \\(module: $\\($m.Source\\) $\\($m.Version\\)\\)\" } else { \"Invoke-Sqlcmd NOT available\" }; $sql = Get-Command sqlcmd -ErrorAction SilentlyContinue; if \\($sql\\) { \"sqlcmd.exe available: $\\($sql.Source\\)\" } else { \"sqlcmd.exe NOT available\" })",
-      "PowerShell(az account show --query \"{sub:name, id:id}\" -o json)"
+      "PowerShell(az account show --query \"{sub:name, id:id}\" -o json)",
+      "Bash(python -c \"import json;json.load\\(open\\('SaaSAccelerator.Webhooks.postman_collection.json'\\)\\);json.load\\(open\\('SaaSAccelerator.Local.postman_environment.json'\\)\\);print\\('Both JSON files valid'\\)\")",
+      "Bash(cat src/DataAccess/Contracts/ISubscriptionSiteRepository.cs)",
+      "Bash(cat src/Services/Contracts/ISitePermissionService.cs)",
+      "Bash(xargs cat)"
     ]
   },
   "enabledPlugins": {
