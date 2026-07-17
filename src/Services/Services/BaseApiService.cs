@@ -50,6 +50,12 @@ public class BaseApiService
             statusCode = reqFailedInnerException.Status;
         }
 
+        // Single funnel for every failed outbound Marketplace API call (all Fulfillment and
+        // Metering actions route their errors through here). Emit one structured, Stage-tagged
+        // record so failures are attributable to the Marketplace API stage in Application
+        // Insights, distinct from the in-project auth/processing stages.
+        this.Logger?.MarketplaceApiError(marketplaceAction.ToString(), statusCode, ex);
+
         if (statusCode != 0)
         {
             Enum.TryParse<HttpStatusCode>(statusCode.ToString(), out HttpStatusCode httpStatusCode);

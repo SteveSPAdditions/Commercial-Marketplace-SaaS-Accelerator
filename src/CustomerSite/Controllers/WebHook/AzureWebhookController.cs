@@ -3,6 +3,7 @@
 
 
 using System;
+using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Marketplace.SaaS.Accelerator.CustomerSite.WebHook;
@@ -13,6 +14,8 @@ using Marketplace.SaaS.Accelerator.Services.Services;
 using Marketplace.SaaS.Accelerator.Services.Utilities;
 using Marketplace.SaaS.Accelerator.Services.WebHook;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Tokens;
 
 namespace Marketplace.SaaS.Accelerator.CustomerSite.Controllers.WebHook;
 
@@ -86,6 +89,13 @@ public class AzureWebhookController : ControllerBase
     /// </summary>
     private readonly IWebhookOperationLogRepository webhookOperationLogRepository;
 
+    /// <summary>
+    /// The logger. Emits structured, Stage-tagged telemetry to Application Insights so a
+    /// live webhook failure can be attributed to the in-project auth check, the local
+    /// processing, or an outbound Microsoft Fulfillment API call.
+    /// </summary>
+    private readonly ILogger<AzureWebhookController> logger;
+
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AzureWebhookController"/> class.
@@ -98,6 +108,8 @@ public class AzureWebhookController : ControllerBase
     /// <param name="configuration">The SaaSApiClientConfiguration from ENV</param>
     /// <param name="validateJwtToken">The validateJwtToken utility</param>
     /// <param name="applicationConfigRepository">The application config repository</param>
+    /// <param name="webhookOperationLogRepository">The webhook operation log repository</param>
+    /// <param name="logger">The logger</param>
     public AzureWebhookController(IApplicationLogRepository applicationLogRepository,
                                   IWebhookProcessor webhookProcessor,
                                   ISubscriptionLogRepository subscriptionsLogRepository,
@@ -106,7 +118,8 @@ public class AzureWebhookController : ControllerBase
                                   SaaSApiClientConfiguration configuration,
                                   ValidateJwtToken validateJwtToken,
                                   IApplicationConfigRepository applicationConfigRepository,
-                                  IWebhookOperationLogRepository webhookOperationLogRepository)
+                                  IWebhookOperationLogRepository webhookOperationLogRepository,
+                                  ILogger<AzureWebhookController> logger)
     {
         this.applicationLogRepository = applicationLogRepository;
         this.subscriptionsRepository = subscriptionsRepository;
@@ -120,6 +133,7 @@ public class AzureWebhookController : ControllerBase
         this.applicationConfigRepository = applicationConfigRepository;
         this.applicationConfigService = new ApplicationConfigService(this.applicationConfigRepository);
         this.webhookOperationLogRepository = webhookOperationLogRepository;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -128,6 +142,16 @@ public class AzureWebhookController : ControllerBase
     /// <param name="request">The request.</param>
     public async Task<IActionResult> Post(WebhookPayload request)
     {
+        // Attach correlating properties to every telemetry item emitted while handling this
+        // webhook, so a failure in Application Insights carries the action / subscription /
+        // operation without having to cross-reference the DB ApplicationLog table.
+        using var logScope = this.logger.BeginScope(new Dictionary<string, object>
+        {
+            ["Action"] = request?.Action.ToString() ?? "(null)",
+            ["SubscriptionId"] = request?.SubscriptionId ?? Guid.Empty,
+            ["OperationId"] = request?.OperationId ?? Guid.Empty,
+        });
+
         try
         {
             await this.applicationLogService.AddApplicationLog("The azure Webhook Triggered.").ConfigureAwait(false);
@@ -144,19 +168,49 @@ public class AzureWebhookController : ControllerBase
 
             if (!fromBuffer && appConfigValueConversion && appConfigValue)
             {
+                await this.applicationLogService.AddApplicationLog("Validating the JWT token.").ConfigureAwait(false);
+
+                // Extract the bearer token explicitly so a missing/malformed Authorization
+                // header is reported as such, instead of surfacing as an opaque IndexOutOfRange.
+                var authHeader = this.HttpContext.Request.Headers["Authorization"].ToString();
+                var headerParts = authHeader.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+                // Shape-only diagnostic (never the token itself — it's a live bearer credential).
+                // Reveals mangling that survives a valid variable: a double "Bearer ", a token with
+                // an embedded space (only the first chunk reaches parts[1]), an unresolved
+                // {{placeholder}}, etc. Emitted as a customDimension for App Insights querying.
+                var tokenShape = DescribeTokenShape(authHeader, headerParts);
+
+                if (headerParts.Length < 2 || !string.Equals(headerParts[0], "Bearer", StringComparison.OrdinalIgnoreCase))
+                {
+                    const string reason = "MissingOrMalformedAuthorizationHeader";
+                    this.logger.LogWarning(
+                        "Webhook rejected at {Stage}: {Reason}. Authorization header was not a 'Bearer <token>' value. TokenShape={TokenShape}",
+                        "WebhookAuth", reason, tokenShape);
+                    await this.applicationLogService.AddApplicationLog($"Jwt token validation failed: {reason}. {tokenShape}").ConfigureAwait(false);
+                    return new UnauthorizedResult();
+                }
+
                 try
                 {
-                    await this.applicationLogService.AddApplicationLog("Validating the JWT token.").ConfigureAwait(false);
-                    var token = this.HttpContext.Request.Headers["Authorization"].ToString().Split(' ')[1];
-                    await validateJwtToken.ValidateTokenAsync(token);
+                    await validateJwtToken.ValidateTokenAsync(headerParts[1]);
                 }
                 catch (Exception e)
                 {
-                    await this.applicationLogService.AddApplicationLog($"Jwt token validation failed with error: {e.Message}").ConfigureAwait(false);
+                    var reason = DescribeAuthFailure(e);
+
+                    // Warning (not Error): a rejected caller is an expected security outcome,
+                    // but Stage=WebhookAuth + Reason makes it queryable in App Insights and
+                    // clearly attributable to the in-project check (never a Microsoft call).
+                    this.logger.LogWarning(
+                        e,
+                        "Webhook rejected at {Stage}: {Reason}. Token validation failed. TokenShape={TokenShape}",
+                        "WebhookAuth", reason, tokenShape);
+                    await this.applicationLogService.AddApplicationLog($"Jwt token validation failed [{reason}]: {e.Message}. {tokenShape}").ConfigureAwait(false);
 
                     return new UnauthorizedResult();
                 }
-            }   
+            }
 
             if (request != null)
             {
@@ -196,6 +250,12 @@ public class AzureWebhookController : ControllerBase
         }
         catch (MarketplaceException ex)
         {
+            // Business-rule rejection (e.g. plan change refused by config, subscription not in
+            // DB). Expected outcome — Warning, Stage=Processing, returned to Microsoft as 400.
+            this.logger.LogWarning(
+                ex,
+                "Webhook returned 400 at {Stage}: {Reason}.",
+                "Processing", ex.Message);
             await this.applicationLogService.AddApplicationLog(
                     $"A Marketplace exception occurred while attempting to process a webhook notification: [{ex.Message}].")
                 .ConfigureAwait(false);
@@ -203,10 +263,64 @@ public class AzureWebhookController : ControllerBase
         }
         catch (Exception ex)
         {
+            // Unexpected failure. This is where an outbound Microsoft Fulfillment API failure
+            // (e.g. the Reinstate reject PATCH) also surfaces — the handler logs Stage=FulfillmentApi
+            // first, so the two are distinguishable in App Insights.
+            this.logger.LogError(
+                ex,
+                "Webhook returned 500 at {Stage}: {Message}.",
+                "Processing", ex.Message);
             await this.applicationLogService.AddApplicationLog(
                     $"An error occurred while attempting to process a webhook notification: [{ex.Message}].")
                 .ConfigureAwait(false);
             return StatusCode(500);
         }
+    }
+
+    /// <summary>
+    /// Maps a token-validation exception to a short, queryable reason so failures can be
+    /// triaged in Application Insights without parsing the raw IDX message.
+    /// </summary>
+    /// <param name="e">The exception thrown by the JWT validation path.</param>
+    /// <returns>A stable, human-readable failure category.</returns>
+    /// <summary>
+    /// Builds a SHAPE-ONLY description of the Authorization header for diagnostics — never the
+    /// token value (it is a live bearer credential). Surfaces the exact reasons a token that is
+    /// valid in the client still fails server-side: double "Bearer ", an embedded space that
+    /// truncates parts[1], an unresolved {{placeholder}}, or a non-JWT segment count.
+    /// </summary>
+    private static string DescribeTokenShape(string authHeader, string[] parts)
+    {
+        var scheme = parts.Length > 0 ? parts[0] : string.Empty;
+        var token = parts.Length >= 2 ? parts[1] : string.Empty;
+        var segments = string.IsNullOrEmpty(token) ? 0 : token.Split('.').Length;
+
+        // First few chars only — enough to tell 'eyJ…' (real JWT) from 'Bearer', '{{acc…' or
+        // '"eyJ…' (quoted), without exposing the payload/signature.
+        var preview = token.Length == 0
+            ? "(empty)"
+            : token.Substring(0, Math.Min(6, token.Length));
+
+        return $"authHeaderLen={authHeader.Length}, spaceParts={parts.Length}, scheme='{scheme}', "
+             + $"tokenLen={token.Length}, dotSegments={segments}, tokenPreview='{preview}'";
+    }
+
+    private static string DescribeAuthFailure(Exception e)
+    {
+        // IDX12741: value handed to the JWT handler is not a JWT (not 3/5 dot-separated
+        // segments). Typically a non-JWT bearer value — e.g. a manual Postman token.
+        if (e is SecurityTokenMalformedException || (e.Message?.Contains("IDX12741") ?? false))
+        {
+            return "MalformedToken: Authorization bearer value is not a JWT";
+        }
+
+        return e switch
+        {
+            SecurityTokenExpiredException => "Expired: token lifetime elapsed",
+            SecurityTokenInvalidSignatureException => "InvalidSignature: signing key did not validate",
+            SecurityTokenInvalidAudienceException => "AudienceMismatch: 'aud' is not the configured ClientId",
+            SecurityTokenValidationException => $"ClaimMismatch: {e.Message}",
+            _ => $"TokenValidationFailed: {e.GetType().Name}",
+        };
     }
 }

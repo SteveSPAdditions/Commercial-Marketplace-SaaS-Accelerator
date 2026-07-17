@@ -104,4 +104,13 @@ public class FulfillmentApiClientLogger : ILogger
     {
         this.logger.LogWarning(ex, message);
     }
+
+    /// <inheritdoc />
+    public void MarketplaceApiError(string marketplaceAction, int statusCode, Exception ex)
+    {
+        this.logger.LogError(
+            ex,
+            "Outbound Marketplace API call failed. Stage={Stage} MarketplaceAction={MarketplaceAction} StatusCode={StatusCode}",
+            "MarketplaceApi", marketplaceAction, statusCode);
+    }
 }

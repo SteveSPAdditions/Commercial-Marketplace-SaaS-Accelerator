@@ -61,4 +61,16 @@ public interface ILogger
     /// <param name="message">The message.</param>
     /// <param name="ex">The ex.</param>
     void Error(string message, Exception ex);
+
+    /// <summary>
+    /// Logs a failed outbound Microsoft Marketplace API call with structured, queryable
+    /// properties (Stage, MarketplaceAction, StatusCode). Implementations forward these as
+    /// message-template properties so the failure surfaces as Application Insights
+    /// customDimensions and can be attributed to the Marketplace API stage — distinct from
+    /// the in-project auth/processing stages.
+    /// </summary>
+    /// <param name="marketplaceAction">The Marketplace action being attempted (e.g. CHANGE_PLAN, ACTIVATE, SUBSCRIPTION_USAGEEVENT).</param>
+    /// <param name="statusCode">The HTTP status code returned by Microsoft, or 0 when unknown.</param>
+    /// <param name="ex">The exception raised by the client library.</param>
+    void MarketplaceApiError(string marketplaceAction, int statusCode, Exception ex);
 }

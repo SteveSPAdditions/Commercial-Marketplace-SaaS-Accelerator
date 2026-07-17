@@ -62,13 +62,17 @@ public class ValidateJwtToken
         string appId = appidClaim?.Value;
 
         //return false if the tenantId or azpId or appId is not matching with the configuration
+
+        // Use SecurityTokenValidationException (not a bare Exception) so callers can
+        // categorize these as token-claim mismatches distinct from malformed/expired/
+        // signature failures when logging.
         if ((tenantId != _saasapiConfiguration.TenantId) && (tidfull != _saasapiConfiguration.TenantId))
         {
-            throw new Exception("TenantId is not matching with the configuration");
+            throw new SecurityTokenValidationException("TenantId is not matching with the configuration");
         }
         if ((azpId != _saasapiConfiguration.Resource) && (appId != _saasapiConfiguration.Resource))
         {
-            throw new Exception("azpId or appId is not matching with the configuration");
+            throw new SecurityTokenValidationException("azpId or appId is not matching with the configuration");
         }
 
         return true;

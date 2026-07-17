@@ -85,6 +85,8 @@ public class WebHookHandler : IWebhookHandler
 
     private readonly ILoggerFactory loggerFactory;
 
+    private readonly ILogger<WebHookHandler> logger;
+
     private readonly IEmailService emailService;
 
     private readonly IOffersRepository offersRepository;
@@ -133,6 +135,7 @@ public class WebHookHandler : IWebhookHandler
         this.subscriptionService = new SubscriptionService(this.subscriptionsRepository, this.planRepository);
         this.emailService = emailService;
         this.loggerFactory = loggerFactory;
+        this.logger = loggerFactory.CreateLogger<WebHookHandler>();
         this.usersRepository = usersRepository;
         this.eventsRepository = eventsRepository;
         this.offersAttributeRepository = offersAttributeRepository;
@@ -264,6 +267,12 @@ public class WebHookHandler : IWebhookHandler
             var patchOperation = await fulfillApiService.PatchOperationStatusResultAsync(payload.SubscriptionId, payload.OperationId, Microsoft.Marketplace.SaaS.Models.UpdateOperationStatusEnum.Failure);
             if (patchOperation != null && patchOperation.Status != 200)
             {
+                // Outbound Microsoft Fulfillment API call failed. Tag Stage=FulfillmentApi so
+                // this is distinguishable in App Insights from an in-project failure when the
+                // controller re-logs the rethrown exception as a 500.
+                this.logger.LogError(
+                    "Webhook failed at {Stage}: PATCH operation returned {StatusCode} {ReasonPhrase} for SubscriptionId={SubscriptionId} OperationId={OperationId}.",
+                    "FulfillmentApi", patchOperation.Status, patchOperation.ReasonPhrase, payload.SubscriptionId, payload.OperationId);
                 await this.applicationLogService.AddApplicationLog($"Reinstate operation PATCH failed with status statuscode {patchOperation.Status} {patchOperation.ReasonPhrase}.").ConfigureAwait(false);
                 //partner trying to fail update operation from customer but PATCH on operation didnt succeced, hence throwing an error
                 throw new Exception(patchOperation.ReasonPhrase);

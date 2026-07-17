@@ -21,7 +21,23 @@ public class SaaSClientLogger<T> : ILogger
     private  ILogger<T> logger;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="SaaSClientLogger"/> class.
+    /// Initializes a new instance of the <see cref="SaaSClientLogger{T}"/> class using a
+    /// DI-provided logger, so entries flow through the host's logging pipeline (Application
+    /// Insights, filesystem, console -- whatever the host configures). Prefer this in the
+    /// web hosts; it is what makes Marketplace API telemetry reach AI. Mirrors the fix
+    /// already applied to <see cref="FulfillmentApiClientLogger"/>.
+    /// </summary>
+    /// <param name="logger">The DI-provided logger.</param>
+    public SaaSClientLogger(ILogger<T> logger)
+    {
+        this.logger = logger;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SaaSClientLogger{T}"/> class with a
+    /// console-only sink. Fallback for hosts that register no logging pipeline (e.g. the
+    /// MeteredTriggerJob console app); telemetry then goes to the WebJob log stream only,
+    /// not Application Insights.
     /// </summary>
     public SaaSClientLogger()
     {
@@ -115,5 +131,13 @@ public class SaaSClientLogger<T> : ILogger
         this.logger.LogError(message);
     }
 
+    /// <inheritdoc />
+    public void MarketplaceApiError(string marketplaceAction, int statusCode, Exception ex)
+    {
+        this.logger.LogError(
+            ex,
+            "Outbound Marketplace API call failed. Stage={Stage} MarketplaceAction={MarketplaceAction} StatusCode={StatusCode}",
+            "MarketplaceApi", marketplaceAction, statusCode);
+    }
 
 }

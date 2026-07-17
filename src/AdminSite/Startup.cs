@@ -163,7 +163,10 @@ public class Startup
                 new MarketplaceSaaSClient(fulfillmentBaseApi, creds),
                 config,
                 sp.GetRequiredService<FulfillmentApiClientLogger>()))
-            .AddSingleton<IMeteredBillingApiService>(new MeteredBillingApiService(new MarketplaceMeteringClient(creds), config, new SaaSClientLogger<MeteredBillingApiService>()))
+            .AddSingleton<IMeteredBillingApiService>(sp => new MeteredBillingApiService(
+                new MarketplaceMeteringClient(creds),
+                config,
+                new SaaSClientLogger<MeteredBillingApiService>(sp.GetRequiredService<ILogger<MeteredBillingApiService>>())))
             .AddSingleton<SaaSApiClientConfiguration>(config)
             .AddSingleton<KnownUsersModel>(knownUsers);
 
