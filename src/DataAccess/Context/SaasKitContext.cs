@@ -47,6 +47,7 @@ public partial class SaasKitContext : DbContext
     public virtual DbSet<SubscriptionSite> SubscriptionSite { get; set; }
     public virtual DbSet<NotificationOutbox> NotificationOutbox { get; set; }
     public virtual DbSet<WebhookOperationLog> WebhookOperationLog { get; set; }
+    public virtual DbSet<WebhookCapture> WebhookCapture { get; set; }
 
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -619,6 +620,18 @@ public partial class SaasKitContext : DbContext
             entity.Property(e => e.OperationId).ValueGeneratedNever();
             entity.Property(e => e.ReceivedUtc).HasColumnType("datetime");
             entity.Property(e => e.Action).HasMaxLength(64).IsUnicode(false);
+            entity.Property(e => e.ResultStatus).HasMaxLength(32).IsUnicode(false);
+        });
+
+        modelBuilder.Entity<WebhookCapture>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.SubscriptionId);
+            entity.HasIndex(e => e.CapturedUtc);
+
+            entity.Property(e => e.CapturedUtc).HasColumnType("datetime");
+            entity.Property(e => e.Action).HasMaxLength(64).IsUnicode(false);
+            entity.Property(e => e.Source).HasMaxLength(16).IsUnicode(false);
             entity.Property(e => e.ResultStatus).HasMaxLength(32).IsUnicode(false);
         });
 

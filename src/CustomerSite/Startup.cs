@@ -99,6 +99,7 @@ public class Startup
             LegerisSignalingEndpointUrl = this.Configuration["SaaSApiConfiguration:LegerisSignalingEndpointUrl"],
             LegerisSignalingHmacSecret = this.Configuration["SaaSApiConfiguration:LegerisSignalingHmacSecret"],
             WebhookBufferHmacSecret = this.Configuration["SaaSApiConfiguration:WebhookBufferHmacSecret"],
+            CustomerSiteBaseUrl = this.Configuration["SaaSApiConfiguration:CustomerSiteBaseUrl"],
             AzureRegionSelectorsFallback = this.Configuration["SaaSApiConfiguration:AzureRegionSelectorsFallback"],
             RuntimeAppClientId = this.Configuration["SaaSApiConfiguration:RuntimeAppClientId"],
             TeamsActivityAppClientId = this.Configuration["SaaSApiConfiguration:TeamsActivityAppClientId"],
@@ -295,6 +296,7 @@ public class Startup
         services.AddScoped<ISubscriptionSiteRepository, SubscriptionSiteRepository>();
         services.AddScoped<INotificationOutboxRepository, NotificationOutboxRepository>();
         services.AddScoped<IWebhookOperationLogRepository, WebhookOperationLogRepository>();
+        services.AddScoped<IWebhookCaptureRepository, WebhookCaptureRepository>();
         services.AddScoped<SaaSClientLogger<SetupController>>();
 
         services.AddHttpClient<IAzureRegionService, AzureRegionService>(client =>

@@ -100,6 +100,8 @@ public class Startup
             // Must match the value rau-portal uses for signing outbound /api/saasaccelerator/event.
             LegerisSignalingHmacSecret = this.Configuration["SaaSApiConfiguration:LegerisSignalingHmacSecret"],
             WebhookBufferHmacSecret = this.Configuration["SaaSApiConfiguration:WebhookBufferHmacSecret"],
+            // Portal origin the webhook-capture Replay POSTs back to (buffer-HMAC-signed).
+            CustomerSiteBaseUrl = this.Configuration["SaaSApiConfiguration:CustomerSiteBaseUrl"],
         };
         var knownUsers = new KnownUsersModel()
         {
@@ -270,7 +272,9 @@ public class Startup
         services.AddScoped<SaaSClientLogger<SchedulerController>>();
         services.AddScoped<INotificationOutboxRepository, NotificationOutboxRepository>();
         services.AddScoped<IWebhookOperationLogRepository, WebhookOperationLogRepository>();
+        services.AddScoped<IWebhookCaptureRepository, WebhookCaptureRepository>();
         services.AddScoped<SaaSClientLogger<OutboxController>>();
         services.AddScoped<SaaSClientLogger<ReconcileController>>();
+        services.AddScoped<SaaSClientLogger<WebhookCaptureController>>();
     }
 }

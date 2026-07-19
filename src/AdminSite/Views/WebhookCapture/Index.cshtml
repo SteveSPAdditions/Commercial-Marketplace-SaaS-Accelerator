@@ -1,0 +1,71 @@
+@model IEnumerable<Marketplace.SaaS.Accelerator.DataAccess.Entities.WebhookCapture>
+@{
+    ViewData["Title"] = "Webhook Captures";
+}
+
+<div class="container">
+    <h2>Webhook captures</h2>
+    <p class="text-muted">
+        Archived inbound Marketplace webhooks. <strong>Replay</strong> re-POSTs a captured payload
+        to the CustomerSite <code>/api/AzureWebhook</code> (buffer-HMAC-signed) with a fresh
+        OperationId, so you can re-run the lifecycle without creating real subscriptions. Requires
+        <code>SaaSApiConfiguration:CustomerSiteBaseUrl</code> and
+        <code>WebhookBufferHmacSecret</code> to be set on this site.
+    </p>
+
+    @if (TempData["ReplayResult"] != null)
+    {
+        <div class="alert alert-success"><small>@TempData["ReplayResult"]</small></div>
+    }
+    @if (TempData["ReplayError"] != null)
+    {
+        <div class="alert alert-danger"><small>@TempData["ReplayError"]</small></div>
+    }
+
+    @if (!Model.Any())
+    {
+        <div class="alert alert-info">No webhooks captured yet.</div>
+    }
+    else
+    {
+        <table class="table table-striped table-sm">
+            <thead>
+                <tr>
+                    <th>Id</th>
+                    <th>Captured (UTC)</th>
+                    <th>Action</th>
+                    <th>Subscription</th>
+                    <th>Operation</th>
+                    <th>Source</th>
+                    <th>Payload</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model)
+                {
+                    <tr>
+                        <td>@row.Id</td>
+                        <td><small>@row.CapturedUtc.ToString("yyyy-MM-dd HH:mm:ss")</small></td>
+                        <td>@row.Action</td>
+                        <td><small>@row.SubscriptionId</small></td>
+                        <td><small>@row.OperationId</small></td>
+                        <td>@row.Source</td>
+                        <td>
+                            <details>
+                                <summary><small>view</small></summary>
+                                <pre style="white-space: pre-wrap; word-break: break-all; max-width: 480px;"><small>@row.PayloadJson</small></pre>
+                            </details>
+                        </td>
+                        <td>
+                            <form method="post" asp-controller="WebhookCapture" asp-action="Replay">
+                                <input type="hidden" name="id" value="@row.Id" />
+                                <button type="submit" class="btn btn-sm btn-primary">Replay</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>

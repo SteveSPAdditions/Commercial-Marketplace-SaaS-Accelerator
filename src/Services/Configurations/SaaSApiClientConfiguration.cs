@@ -140,6 +140,13 @@ public class SaaSApiClientConfiguration
     /// <summary>Pre-shared HMAC-SHA256 secret used to verify inbound webhook calls forwarded by the WebhookBuffer Function App.</summary>
     public string WebhookBufferHmacSecret { get; set; }
 
+    /// <summary>
+    /// Base URL of the CustomerSite portal (e.g. https://rau-portal.azurewebsites.net), no trailing
+    /// slash. Used by the AdminSite webhook-capture Replay to POST a captured payload back to the
+    /// portal's /api/AzureWebhook (buffer-HMAC-signed). Not needed for normal webhook processing.
+    /// </summary>
+    public string CustomerSiteBaseUrl { get; set; }
+
     /// <summary>JSON-encoded fallback region selector list used when Function1 is unreachable.</summary>
     public string AzureRegionSelectorsFallback { get; set; }
 

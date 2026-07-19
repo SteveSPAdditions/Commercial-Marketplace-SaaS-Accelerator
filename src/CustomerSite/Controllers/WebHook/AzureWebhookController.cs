@@ -90,11 +90,24 @@ public class AzureWebhookController : ControllerBase
     private readonly IWebhookOperationLogRepository webhookOperationLogRepository;
 
     /// <summary>
+    /// The webhook capture repository. Archives each inbound payload (wire-format JSON) so real
+    /// webhooks can be replayed from AdminSite for repetitive testing.
+    /// </summary>
+    private readonly IWebhookCaptureRepository webhookCaptureRepository;
+
+    /// <summary>
     /// The logger. Emits structured, Stage-tagged telemetry to Application Insights so a
     /// live webhook failure can be attributed to the in-project auth check, the local
     /// processing, or an outbound Microsoft Fulfillment API call.
     /// </summary>
     private readonly ILogger<AzureWebhookController> logger;
+
+    /// <summary>
+    /// Wire-format serializer for captured payloads: camelCase to mirror what Microsoft sends,
+    /// while the DTO's own [JsonPropertyName]/[JsonConverter] attributes still win (so `Id` stays
+    /// `Id` and enums stay strings). The result binds back to an identical WebhookPayload on replay.
+    /// </summary>
+    private static readonly JsonSerializerOptions CaptureJsonOptions = new(JsonSerializerDefaults.Web);
 
 
     /// <summary>
@@ -119,6 +132,7 @@ public class AzureWebhookController : ControllerBase
                                   ValidateJwtToken validateJwtToken,
                                   IApplicationConfigRepository applicationConfigRepository,
                                   IWebhookOperationLogRepository webhookOperationLogRepository,
+                                  IWebhookCaptureRepository webhookCaptureRepository,
                                   ILogger<AzureWebhookController> logger)
     {
         this.applicationLogRepository = applicationLogRepository;
@@ -133,6 +147,7 @@ public class AzureWebhookController : ControllerBase
         this.applicationConfigRepository = applicationConfigRepository;
         this.applicationConfigService = new ApplicationConfigService(this.applicationConfigRepository);
         this.webhookOperationLogRepository = webhookOperationLogRepository;
+        this.webhookCaptureRepository = webhookCaptureRepository;
         this.logger = logger;
     }
 
@@ -214,6 +229,28 @@ public class AzureWebhookController : ControllerBase
 
             if (request != null)
             {
+                // Archive the inbound payload (wire-format JSON) so it can be replayed from
+                // AdminSite for repetitive testing without creating real subscriptions. Best-effort:
+                // a capture failure must never break webhook processing. Captured on arrival, so
+                // duplicate deliveries are visible too.
+                try
+                {
+                    this.webhookCaptureRepository.Save(new DataAccess.Entities.WebhookCapture
+                    {
+                        CapturedUtc = DateTime.UtcNow,
+                        Action = request.Action.ToString(),
+                        SubscriptionId = request.SubscriptionId == Guid.Empty ? (Guid?)null : request.SubscriptionId,
+                        OperationId = request.OperationId == Guid.Empty ? (Guid?)null : request.OperationId,
+                        Source = fromBuffer ? "Buffer" : "Direct",
+                        ResultStatus = "Received",
+                        PayloadJson = JsonSerializer.Serialize(request, CaptureJsonOptions),
+                    });
+                }
+                catch (Exception captureEx)
+                {
+                    this.logger.LogWarning(captureEx, "Webhook capture failed at {Stage} (non-fatal).", "Processing");
+                }
+
                 // Idempotency short-circuit: if we have already processed this OperationId,
                 // log and return 200 without re-running handlers. Microsoft + the buffer can
                 // both deliver the same OperationId more than once.
