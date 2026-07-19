@@ -77,6 +77,7 @@ public class SubscriptionsRepository : ISubscriptionsRepository
         {
             existingSubscription.IsActive = isActive;
             existingSubscription.SubscriptionStatus = subscriptionStatus;
+            existingSubscription.ModifyDate = DateTime.Now;
             this.context.Subscriptions.Update(existingSubscription);
         }
 
@@ -94,6 +95,7 @@ public class SubscriptionsRepository : ISubscriptionsRepository
         if (existingSubscription != null)
         {
             existingSubscription.AmpplanId = planId;
+            existingSubscription.ModifyDate = DateTime.Now;
             this.context.Subscriptions.Update(existingSubscription);
         }
 
@@ -111,6 +113,7 @@ public class SubscriptionsRepository : ISubscriptionsRepository
         if (existingSubscription != null)
         {
             existingSubscription.Ampquantity = quantity;
+            existingSubscription.ModifyDate = DateTime.Now;
             this.context.Subscriptions.Update(existingSubscription);
         }
 
