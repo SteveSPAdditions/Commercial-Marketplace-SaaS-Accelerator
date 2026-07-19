@@ -370,3 +370,6 @@ src/WebhookBuffer/local.settings.json
 # Filled-in copies of the WebhookBuffer App Settings JSON (template only is committed)
 deployment/webhookbuffer.appsettings.json
 deployment/webhookbuffer.appsettings.local.json
+
+# Private Postman environments with real per-tenant values / secrets (template only is committed)
+tools/postman/*.private.postman_environment.json

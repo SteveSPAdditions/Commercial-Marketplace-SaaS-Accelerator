@@ -11,10 +11,22 @@ against the CustomerSite webhook endpoint without needing a live marketplace ope
 
 | File | Purpose |
 |------|---------|
-| `SaaSAccelerator.Webhooks.postman_collection.json` | The collection — one request per webhook action. |
-| `SaaSAccelerator.Local.postman_environment.json` | Editable variables (base URL, subscription, plan, HMAC secret). |
+| `SaaSAccelerator.Webhooks.postman_collection.json` | The collection — one request per webhook action, plus a **Lifecycle** folder. |
+| `SaaSAccelerator.Local.postman_environment.json` | Editable variables (base URL, subscription, plan, HMAC secret). Template — placeholder values. |
+| `*.private.postman_environment.json` | **Git-ignored.** Your real per-tenant environments (real subscription id, deployed base URL, and — for buffer mode — the HMAC secret). Never committed. Copy the template to `SaaSAccelerator.<name>.private.postman_environment.json` for each environment. |
 
-Import both into Postman, then select the **SaaS Accelerator - Local** environment.
+Import the collection + one environment into Postman, then select that environment.
+
+## Lifecycle folder (repetitive testing, no new subscriptions)
+
+The **`Lifecycle: Trial -> Paid -> Cancel`** folder drives the full arc against **one existing
+subscription**: **Reinstate → ChangePlan → Unsubscribe**. Point Postman's **Collection Runner**
+at that folder (or send the three top-to-bottom) and re-run it as often as you like — each send
+mints a fresh `Id` so nothing is deduped. This is how you test the state machine repeatedly
+without creating real marketplace subscriptions.
+
+Prerequisites: `subscriptionId` exists in the DB, app-config **`AcceptSubscriptionUpdates=true`**,
+and (buffer mode) `hmacSecret` set.
 
 ## Actions covered
 

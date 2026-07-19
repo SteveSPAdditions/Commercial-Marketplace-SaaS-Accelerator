@@ -58,7 +58,7 @@
     { "key": "offerId", "value": "read-and-understood-saas-preview", "type": "string" },
     { "key": "publisherId", "value": "your-publisher-id", "type": "string" },
     { "key": "planId", "value": "free-trial", "type": "string" },
-    { "key": "newPlanId", "value": "gold", "type": "string" },
+    { "key": "newPlanId", "value": "standard-monthly", "type": "string" },
     { "key": "quantity", "value": "1", "type": "string" },
     { "key": "newQuantity", "value": "5", "type": "string" },
     { "key": "opId", "value": "", "type": "string" },
@@ -163,6 +163,54 @@
         },
         "description": "Transfer is a recognised enum value but has no dedicated processor branch, so it falls through to UnknownActionAsync (logged, no state change). Use this request as a template for any unhandled action."
       }
+    },
+    {
+      "name": "Lifecycle: Trial -> Paid -> Cancel",
+      "description": "Ordered run for REPETITIVE testing against a single existing subscription, with no new subscriptions required. Point Postman's Collection Runner at THIS FOLDER (or send the three top-to-bottom). Each send mints a fresh OperationId so nothing is deduped. Drives the full arc: (1) Reinstate -> Subscribed, (2) ChangePlan {{planId}} -> {{newPlanId}}, (3) Unsubscribe -> Unsubscribed. Prerequisites: subscription {{subscriptionId}} exists in the DB, app-config AcceptSubscriptionUpdates=true, and (buffer mode) hmacSecret is set. Re-run the whole folder as many times as you like.",
+      "item": [
+        {
+          "name": "1 - Reinstate (-> Subscribed)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/api/AzureWebhook", "host": [ "{{baseUrl}}" ], "path": [ "api", "AzureWebhook" ] },
+            "body": {
+              "mode": "raw",
+              "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"action\": \"Reinstate\",\n  \"activityId\": \"{{activityId}}\",\n  \"subscriptionId\": \"{{subscriptionId}}\",\n  \"offerId\": \"{{offerId}}\",\n  \"publisherId\": \"{{publisherId}}\",\n  \"planId\": \"{{planId}}\",\n  \"quantity\": {{quantity}},\n  \"Id\": \"{{opId}}\",\n  \"status\": \"InProgress\",\n  \"timeStamp\": \"{{timeStamp}}\",\n  \"subscription\": {\n    \"id\": \"{{subscriptionId}}\",\n    \"name\": \"{{subscriptionName}}\",\n    \"offerId\": \"{{offerId}}\",\n    \"planId\": \"{{planId}}\",\n    \"quantity\": {{quantity}},\n    \"saasSubscriptionStatus\": \"Suspended\"\n  }\n}"
+            },
+            "description": "Step 1: sets the local subscription status to Subscribed (accept path), giving a clean starting point for the plan change. Requires AcceptSubscriptionUpdates=true."
+          }
+        },
+        {
+          "name": "2 - ChangePlan (trial -> paid)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/api/AzureWebhook", "host": [ "{{baseUrl}}" ], "path": [ "api", "AzureWebhook" ] },
+            "body": {
+              "mode": "raw",
+              "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"action\": \"ChangePlan\",\n  \"activityId\": \"{{activityId}}\",\n  \"subscriptionId\": \"{{subscriptionId}}\",\n  \"offerId\": \"{{offerId}}\",\n  \"publisherId\": \"{{publisherId}}\",\n  \"planId\": \"{{newPlanId}}\",\n  \"quantity\": {{quantity}},\n  \"Id\": \"{{opId}}\",\n  \"status\": \"InProgress\",\n  \"timeStamp\": \"{{timeStamp}}\",\n  \"subscription\": {\n    \"id\": \"{{subscriptionId}}\",\n    \"name\": \"{{subscriptionName}}\",\n    \"offerId\": \"{{offerId}}\",\n    \"planId\": \"{{planId}}\",\n    \"quantity\": {{quantity}},\n    \"saasSubscriptionStatus\": \"Subscribed\"\n  }\n}"
+            },
+            "description": "Step 2: top-level planId is the NEW plan ({{newPlanId}}); subscription.planId is the OLD plan ({{planId}}). Applied because the two differ and AcceptSubscriptionUpdates=true. After this, the AMP DB row should read AMPPlanId={{newPlanId}}."
+          }
+        },
+        {
+          "name": "3 - Unsubscribe (-> Unsubscribed)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/api/AzureWebhook", "host": [ "{{baseUrl}}" ], "path": [ "api", "AzureWebhook" ] },
+            "body": {
+              "mode": "raw",
+              "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"action\": \"Unsubscribe\",\n  \"activityId\": \"{{activityId}}\",\n  \"subscriptionId\": \"{{subscriptionId}}\",\n  \"offerId\": \"{{offerId}}\",\n  \"publisherId\": \"{{publisherId}}\",\n  \"planId\": \"{{newPlanId}}\",\n  \"quantity\": {{quantity}},\n  \"Id\": \"{{opId}}\",\n  \"status\": \"InProgress\",\n  \"timeStamp\": \"{{timeStamp}}\",\n  \"subscription\": {\n    \"id\": \"{{subscriptionId}}\",\n    \"name\": \"{{subscriptionName}}\",\n    \"offerId\": \"{{offerId}}\",\n    \"planId\": \"{{newPlanId}}\",\n    \"quantity\": {{quantity}},\n    \"saasSubscriptionStatus\": \"Unsubscribed\"\n  }\n}"
+            },
+            "description": "Step 3: sets the local subscription status to Unsubscribed (status only; the plan stays at {{newPlanId}} from step 2)."
+          }
+        }
+      ]
     }
   ]
 }
