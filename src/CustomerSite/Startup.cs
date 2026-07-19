@@ -3,6 +3,7 @@
 
 using Azure.Identity;
 using Marketplace.SaaS.Accelerator.CustomerSite.Controllers;
+using Marketplace.SaaS.Accelerator.CustomerSite.Controllers.Api;
 using Marketplace.SaaS.Accelerator.CustomerSite.HostedServices;
 using Marketplace.SaaS.Accelerator.CustomerSite.WebHook;
 using Marketplace.SaaS.Accelerator.DataAccess.Context;
@@ -177,6 +178,37 @@ public class Startup
             opts.Cookie.MaxAge = opts.ExpireTimeSpan;
             opts.SlidingExpiration = true;
         });
+        // --- Machine-to-machine bearer auth for the subscription API (React "Upgrade" button) ---
+        // A SEPARATE NAMED scheme so it never disturbs the OIDC cookie sign-in the MVC portal
+        // uses. Tokens are minted for the Read & Understood runtime app (RuntimeAppClientId) by
+        // our own tenant, so - unlike the inbound marketplace webhook token, whose appid must be
+        // Microsoft's 20e940b3 app - a first-party backend CAN produce these. Validates audience
+        // (== RuntimeAppClientId) + issuer (our tenant) + signature + lifetime.
+        var apiAuthorityBase = string.IsNullOrEmpty(config.AdAuthenticationEndPoint)
+            ? "https://login.microsoftonline.com/"
+            : config.AdAuthenticationEndPoint.TrimEnd('/') + "/";
+        services.AddAuthentication()
+            .AddJwtBearer(SubscriptionApiController.SubscriptionApiAuthScheme, opts =>
+            {
+                opts.Authority = $"{apiAuthorityBase}{config.TenantId}/v2.0";
+                opts.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+                {
+                    ValidateAudience = true,
+                    ValidAudiences = new[]
+                    {
+                        config.RuntimeAppClientId,
+                        $"api://{config.RuntimeAppClientId}",
+                    },
+                    ValidateIssuer = true,
+                    ValidIssuers = new[]
+                    {
+                        $"https://login.microsoftonline.com/{config.TenantId}/v2.0",
+                        $"https://sts.windows.net/{config.TenantId}/",
+                    },
+                    ValidateLifetime = true,
+                };
+            });
+
         services
             .AddTransient<IClaimsTransformation, CustomClaimsTransformation>()
             .AddScoped<ExceptionHandlerAttribute>()
