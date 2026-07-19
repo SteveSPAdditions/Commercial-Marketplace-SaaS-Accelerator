@@ -283,6 +283,7 @@ public class Startup
         services.AddScoped<IApplicationLogRepository, ApplicationLogRepository>();
         services.AddScoped<IWebhookProcessor, WebhookProcessor>();
         services.AddScoped<IWebhookHandler, WebHookHandler>();
+        services.AddScoped<ISubscriptionSignalService, SubscriptionSignalService>();
         services.AddScoped<IApplicationConfigRepository, ApplicationConfigRepository>();
         services.AddScoped<IEmailTemplateRepository, EmailTemplateRepository>();
         services.AddScoped<IOffersRepository, OffersRepository>();

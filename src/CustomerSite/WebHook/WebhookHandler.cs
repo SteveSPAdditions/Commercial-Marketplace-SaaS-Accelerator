@@ -93,6 +93,8 @@ public class WebHookHandler : IWebhookHandler
 
     private readonly IOfferAttributesRepository offersAttributeRepository;
 
+    private readonly ISubscriptionSignalService subscriptionSignalService;
+
     private const string AcceptSubscriptionUpdates = "AcceptSubscriptionUpdates";
 
     /// <summary>
@@ -112,21 +114,24 @@ public class WebHookHandler : IWebhookHandler
     /// <param name="applicationConfigRepository">The application configuration repository.</param>
     /// <param name="emailTemplateRepository">The email template repository.</param>
     /// <param name="planEventsMappingRepository">The plan events mapping repository.</param>
-    public WebHookHandler(IApplicationLogRepository applicationLogRepository, 
-                          ISubscriptionLogRepository subscriptionsLogRepository, 
-                          ISubscriptionsRepository subscriptionsRepository, 
-                          IPlansRepository planRepository, 
-                          IOfferAttributesRepository offersAttributeRepository, 
-                          IOffersRepository offersRepository, 
-                          IFulfillmentApiService fulfillApiService, 
-                          IUsersRepository usersRepository, 
-                          ILoggerFactory loggerFactory, 
-                          IEmailService emailService, 
-                          IEventsRepository eventsRepository, 
-                          IApplicationConfigRepository applicationConfigRepository, 
-                          IEmailTemplateRepository emailTemplateRepository, 
-                          IPlanEventsMappingRepository planEventsMappingRepository)
+    /// <param name="subscriptionSignalService">Enqueues subscription-state-change signals to RAU via the outbox.</param>
+    public WebHookHandler(IApplicationLogRepository applicationLogRepository,
+                          ISubscriptionLogRepository subscriptionsLogRepository,
+                          ISubscriptionsRepository subscriptionsRepository,
+                          IPlansRepository planRepository,
+                          IOfferAttributesRepository offersAttributeRepository,
+                          IOffersRepository offersRepository,
+                          IFulfillmentApiService fulfillApiService,
+                          IUsersRepository usersRepository,
+                          ILoggerFactory loggerFactory,
+                          IEmailService emailService,
+                          IEventsRepository eventsRepository,
+                          IApplicationConfigRepository applicationConfigRepository,
+                          IEmailTemplateRepository emailTemplateRepository,
+                          IPlanEventsMappingRepository planEventsMappingRepository,
+                          ISubscriptionSignalService subscriptionSignalService)
     {
+        this.subscriptionSignalService = subscriptionSignalService;
         this.applicationLogRepository = applicationLogRepository;
         this.subscriptionsRepository = subscriptionsRepository;
         this.planRepository = planRepository;
@@ -191,6 +196,7 @@ public class WebHookHandler : IWebhookHandler
         await this.applicationLogService.AddApplicationLog("Plan Successfully Changed.").ConfigureAwait(false);
         auditLog.NewValue = payload.PlanId;
         this.subscriptionsLogRepository.Save(auditLog);
+        this.subscriptionSignalService.EnqueueSubscriptionSignal(payload.SubscriptionId, "PlanChanged", payload.OperationId);
         await Task.CompletedTask;
     }
 
@@ -259,6 +265,7 @@ public class WebHookHandler : IWebhookHandler
         {
             this.subscriptionService.UpdateStateOfSubscription(payload.SubscriptionId, SubscriptionStatusEnumExtension.Subscribed.ToString(), false);
             await this.applicationLogService.AddApplicationLog("Reinstated Successfully.").ConfigureAwait(false);
+            this.subscriptionSignalService.EnqueueSubscriptionSignal(payload.SubscriptionId, "Reinstated", payload.OperationId);
             auditLog.NewValue = Convert.ToString(SubscriptionStatusEnum.Subscribed);
                 
         }
@@ -310,6 +317,7 @@ public class WebHookHandler : IWebhookHandler
         var oldValue = this.subscriptionService.GetSubscriptionsBySubscriptionId(payload.SubscriptionId);
         this.subscriptionService.UpdateStateOfSubscription(payload.SubscriptionId, SubscriptionStatusEnumExtension.Suspend.ToString(), false);
         await this.applicationLogService.AddApplicationLog("Offer Successfully Suspended.").ConfigureAwait(false);
+        this.subscriptionSignalService.EnqueueSubscriptionSignal(payload.SubscriptionId, "Suspended", payload.OperationId);
 
         if (oldValue != null)
         {
@@ -338,6 +346,7 @@ public class WebHookHandler : IWebhookHandler
         var oldValue = this.subscriptionService.GetSubscriptionsBySubscriptionId(payload.SubscriptionId);
         this.subscriptionService.UpdateStateOfSubscription(payload.SubscriptionId, SubscriptionStatusEnumExtension.Unsubscribed.ToString(), false);
         await this.applicationLogService.AddApplicationLog("Offer Successfully UnSubscribed.").ConfigureAwait(false);
+        this.subscriptionSignalService.EnqueueSubscriptionSignal(payload.SubscriptionId, "Unsubscribed", payload.OperationId);
 
         if (oldValue != null)
         {

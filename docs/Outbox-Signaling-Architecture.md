@@ -138,9 +138,12 @@ Only one is wired up today. The receiver routes on `eventType` in the body, so a
 | EventType | Producer | Body fields (additional) | Receiver action |
 |---|---|---|---|
 | `TenantRegionFanOut` | `AzureRegionService.SaveRegionAndEnqueueFanOutAsync` | `assignedTenantId`, `azureRegion` | `FanOutSaasTenantRegionAsync` — upsert `TenantRegion` row in every `MasterDb{region}` in **parallel**. Partial failure → 503, no `SaasEventLog` write, sender's outbox retries. Per-region upserts are idempotent (check existing row before update). |
-| _Subscribed_ (planned) | _none_ | _t.b.d._ | _t.b.d._ |
-| _Unsubscribed_ (planned) | _none_ | _t.b.d._ | _t.b.d._ |
-| _Suspended_ (planned) | _none_ | _t.b.d._ | _t.b.d._ |
+| `PlanChanged` | `SubscriptionSignalService` (from `WebHookHandler.ChangePlanAsync`) | `assignedTenantId`, `planId`, `subscriptionStatus` | **Pull-nudge (receiver case not yet implemented — Phase 3).** RAU keys on `assignedTenantId`, sets `TenantRegions.SubscriptionId` if null, then re-pulls live plan/status from the Fulfillment API. Until the `case` exists, the receiver returns 202 `recorded-no-action` (dispatcher treats 202 as Delivered). |
+| `Unsubscribed` | `SubscriptionSignalService` (from `WebHookHandler.UnsubscribedAsync`) | `assignedTenantId`, `planId`, `subscriptionStatus` | Pull-nudge (Phase 3), same as above. |
+| `Suspended` | `SubscriptionSignalService` (from `WebHookHandler.SuspendedAsync`) | `assignedTenantId`, `planId`, `subscriptionStatus` | Pull-nudge (Phase 3), same as above. |
+| `Reinstated` | `SubscriptionSignalService` (from `WebHookHandler.ReinstatedAsync`) | `assignedTenantId`, `planId`, `subscriptionStatus` | Pull-nudge (Phase 3), same as above. |
+
+**Producer notes (subscription events):** `SubscriptionSignalService` runs in the webhook hot path, so it resolves its own scope + `SaasKitContext` via `IServiceScopeFactory` (per the DbContext-concurrency rule) and reads the post-update state for the body. Best-effort (never throws into the handler) and idempotent on `{eventType}|{ampSubscriptionId:N}|{operationId:N}` so a webhook redelivery collapses to one signal. Enqueue is **not** atomic with the state write (separate context) — the daily reconcile is the backstop for the crash window. Keyed on **tenant id**, because RAU is 1 tenant : 1 subscription (unique `TenantRegions.TenantId`) whereas the accelerator is 1 tenant : many; `ampSubscriptionId` rides in the body to disambiguate + anchor.
 
 Future producers follow the same recipe: build the payload, `outboxRepo.Enqueue(...)`, `SaveChangesAsync` — inside the transaction that commits the business-state change.
 
@@ -474,6 +477,7 @@ The reconciler is a safety net. In steady state it produces zero changes — the
 
 ## 12. Open work
 
-- **No producer for Subscribed / Unsubscribed / Suspended** — the receiver's switch statement is ready, but nothing in this repo enqueues them yet. Implement alongside the relevant subscription state handlers in [Services/StatusHandlers/](../src/Services/StatusHandlers/) when these signals become required.
+- **~~No producer for Subscribed / Unsubscribed / Suspended~~ (done)** — `SubscriptionSignalService` now enqueues `PlanChanged` / `Unsubscribed` / `Suspended` / `Reinstated` from `WebHookHandler`. **Remaining (Phase 3):** the RAU-side `SaasAcceleratorEventHandler` has no `case` for these yet, so they deliver as 202 `recorded-no-action` until the pull-nudge handlers are added on the Legeris side.
+- **`WebNotificationUrl` still fires in parallel** — the outbox producer was added alongside the legacy fire-and-forget `WebNotificationService` push, not as a replacement. Retire `WebNotificationUrl` for subscription state once RAU consumes the outbox events.
 - **No dead-letter alerting** — failures are visible in the admin Outbox page and SQL but there's no automated push (email, monitoring). If outbox reliability becomes load-bearing, add an Application Insights alert on `OutboxDrainService` log severity ≥ Error.
 - **Single drainer instance assumed for ordering** — `LeasePending` guarantees mutual exclusion per row, not global ordering. If a future event type cares about ordering relative to another (e.g., "unsubscribe must arrive after subscribe"), add explicit ordering at the receiver, not the sender.
