@@ -69,6 +69,9 @@ public class NotificationOutboxRepository : INotificationOutboxRepository
         row.DeliveredUtc = DateTime.UtcNow;
         row.LastResponseSnippet = Trim(responseSnippet, 512);
         row.LeasedUntilUtc = null;
+        // Clear any error from earlier failed attempts so a delivered row reads cleanly
+        // (delivery is authoritative via DeliveredUtc; Attempts still shows it took retries).
+        row.LastError = null;
         return this.context.SaveChanges();
     }
 
