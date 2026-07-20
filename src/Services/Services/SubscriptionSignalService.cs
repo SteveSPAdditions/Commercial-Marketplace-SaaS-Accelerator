@@ -4,6 +4,7 @@ using Marketplace.SaaS.Accelerator.DataAccess.Context;
 using Marketplace.SaaS.Accelerator.DataAccess.Contracts;
 using Marketplace.SaaS.Accelerator.DataAccess.Entities;
 using Marketplace.SaaS.Accelerator.Services.Contracts;
+using Marketplace.SaaS.Accelerator.Services.Utilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -64,7 +65,7 @@ public class SubscriptionSignalService : ISubscriptionSignalService
                 saasSubscriptionId = ampSubscriptionId,
                 assignedTenantId = subscription.PurchaserTenantId ?? Guid.Empty,
                 planId = subscription.AmpplanId,
-                subscriptionStatus = subscription.SubscriptionStatus,
+                subscriptionStatus = SubscriptionStatusNormalizer.ToMarketplaceStatus(subscription.SubscriptionStatus),
                 modifiedUtc = now,
                 occurredBy = "Accelerator",
             };

@@ -68,6 +68,18 @@ public class ReconcileController : ControllerBase
                             subscriptionStatus = s.SubscriptionStatus,
                             modifiedUtc = stc.ModifiedUtc,
                         })
+                .ToList()
+                .Select(r => new
+                {
+                    r.purchaserTenantId,
+                    r.azureRegion,
+                    r.ampSubscriptionId,
+                    // Normalize to Microsoft canonical (Suspend -> Suspended) so RAU's
+                    // push-authoritative reconcile corrector compares against the same
+                    // vocabulary the live Fulfillment pull returns.
+                    subscriptionStatus = SubscriptionStatusNormalizer.ToMarketplaceStatus(r.subscriptionStatus),
+                    r.modifiedUtc,
+                })
                 .ToList();
 
             return this.Ok(new
