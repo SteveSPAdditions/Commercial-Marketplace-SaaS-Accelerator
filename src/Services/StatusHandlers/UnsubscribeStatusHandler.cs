@@ -33,6 +33,12 @@ public class UnsubscribeStatusHandler : AbstractSubscriptionStatusHandler
     private readonly ILogger<UnsubscribeStatusHandler> logger;
 
     /// <summary>
+    /// Enqueues subscription-state-change signals to RAU via the outbox. Optional/nullable: callers
+    /// that don't wire it up simply emit no signal (the daily reconcile remains the backstop).
+    /// </summary>
+    private readonly ISubscriptionSignalService subscriptionSignalService;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="UnsubscribeStatusHandler" /> class.
     /// </summary>
     /// <param name="fulfillApiService">The fulfill API client.</param>
@@ -41,18 +47,21 @@ public class UnsubscribeStatusHandler : AbstractSubscriptionStatusHandler
     /// <param name="plansRepository">The plans repository.</param>
     /// <param name="usersRepository">The users repository.</param>
     /// <param name="logger">The logger.</param>
+    /// <param name="subscriptionSignalService">Enqueues the RAU "Unsubscribed" signal on a portal-initiated unsubscribe.</param>
     public UnsubscribeStatusHandler(
         IFulfillmentApiService fulfillApiService,
         ISubscriptionsRepository subscriptionsRepository,
         ISubscriptionLogRepository subscriptionLogRepository,
         IPlansRepository plansRepository,
         IUsersRepository usersRepository,
-        ILogger<UnsubscribeStatusHandler> logger)
+        ILogger<UnsubscribeStatusHandler> logger,
+        ISubscriptionSignalService subscriptionSignalService = null)
         : base(subscriptionsRepository, plansRepository, usersRepository)
     {
         this.fulfillmentApiService = fulfillApiService;
         this.subscriptionLogRepository = subscriptionLogRepository;
         this.logger = logger;
+        this.subscriptionSignalService = subscriptionSignalService;
     }
 
     /// <summary>
@@ -88,6 +97,13 @@ public class UnsubscribeStatusHandler : AbstractSubscriptionStatusHandler
                 this.subscriptionLogRepository.Save(auditLog);
 
                 this.subscriptionLogRepository.LogStatusDuringProvisioning(subscriptionID, "Unsubscribed Successfully", SubscriptionStatusEnumExtension.Unsubscribed.ToString());
+
+                // Signal RAU that the subscription is now unsubscribed. The webhook-driven unsubscribe
+                // already signals; this covers the portal-initiated (Fulfillment DELETE) path, which
+                // otherwise never reaches RAU's cache -- a real access leak once
+                // MarketplaceStatusSource="Cached". No Marketplace operation id here, so key idempotency
+                // on the subscription alone via Guid.Empty. Best-effort; the signal service never throws.
+                this.subscriptionSignalService?.EnqueueSubscriptionSignal(subscriptionID, "Unsubscribed", Guid.Empty);
             }
             catch (Exception ex)
             {

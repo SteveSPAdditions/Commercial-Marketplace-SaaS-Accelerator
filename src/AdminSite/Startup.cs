@@ -276,6 +276,7 @@ public class Startup
         services.AddScoped<SaaSClientLogger<ApplicationConfigController>>();
         services.AddScoped<SaaSClientLogger<SchedulerController>>();
         services.AddScoped<INotificationOutboxRepository, NotificationOutboxRepository>();
+        services.AddScoped<ISubscriptionSignalService, SubscriptionSignalService>();
         services.AddScoped<IWebhookOperationLogRepository, WebhookOperationLogRepository>();
         services.AddScoped<IWebhookCaptureRepository, WebhookCaptureRepository>();
         services.AddScoped<SaaSClientLogger<OutboxController>>();

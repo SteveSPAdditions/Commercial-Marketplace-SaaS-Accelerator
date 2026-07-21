@@ -33,27 +33,35 @@ public class PendingActivationStatusHandler : AbstractSubscriptionStatusHandler
     private readonly ILogger<PendingActivationStatusHandler> logger;
 
     /// <summary>
+    /// Enqueues subscription-state-change signals to RAU via the outbox. Optional/nullable: callers
+    /// that don't wire it up simply emit no signal (the daily reconcile remains the backstop).
+    /// </summary>
+    private readonly ISubscriptionSignalService subscriptionSignalService;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="PendingActivationStatusHandler"/> class.
     /// </summary>
     /// <param name="fulfillApiService">The fulfill API client.</param>
     /// <param name="subscriptionsRepository">The subscriptions repository.</param>
     /// <param name="subscriptionLogRepository">The subscription log repository.</param>
-    /// <param name="subscriptionTemplateParametersRepository">The subscription template parameters repository.</param>
     /// <param name="plansRepository">The plans repository.</param>
     /// <param name="usersRepository">The users repository.</param>
     /// <param name="logger">The logger.</param>
+    /// <param name="subscriptionSignalService">Enqueues the RAU "Activated" signal on successful activation.</param>
     public PendingActivationStatusHandler(
         IFulfillmentApiService fulfillApiService,
         ISubscriptionsRepository subscriptionsRepository,
         ISubscriptionLogRepository subscriptionLogRepository,
         IPlansRepository plansRepository,
         IUsersRepository usersRepository,
-        ILogger<PendingActivationStatusHandler> logger)
+        ILogger<PendingActivationStatusHandler> logger,
+        ISubscriptionSignalService subscriptionSignalService = null)
         : base(subscriptionsRepository, plansRepository, usersRepository)
     {
         this.fulfillmentApiService = fulfillApiService;
         this.subscriptionLogRepository = subscriptionLogRepository;
         this.logger = logger;
+        this.subscriptionSignalService = subscriptionSignalService;
     }
 
     /// <summary>
@@ -93,6 +101,13 @@ public class PendingActivationStatusHandler : AbstractSubscriptionStatusHandler
                 this.subscriptionLogRepository.Save(auditLog);
 
                 this.subscriptionLogRepository.LogStatusDuringProvisioning(subscriptionID, "Activated", SubscriptionStatusEnumExtension.Subscribed.ToString());
+
+                // Signal RAU that the subscription is now active. This is what flips RAU's cached
+                // MarketplaceSubscriptionStatus back to Subscribed on a resubscribe (the only path that
+                // does so once MarketplaceStatusSource="Cached"; inert but harmless under "Live"). No
+                // Marketplace operation id is available here, so key idempotency on the subscription
+                // alone via Guid.Empty. Best-effort; the signal service never throws.
+                this.subscriptionSignalService?.EnqueueSubscriptionSignal(subscriptionID, "Activated", Guid.Empty);
             }
             catch (Exception ex)
             {

@@ -157,8 +157,9 @@ public class HomeController : BaseController
         IOffersRepository offersRepository, 
         IOfferAttributesRepository offersAttributeRepository,
         IAppVersionService appVersionService,
-        ISAGitReleasesService sAGitReleasesService, 
-        SaaSClientLogger<HomeController> logger) : base(applicationConfigRepository, appVersionService)
+        ISAGitReleasesService sAGitReleasesService,
+        SaaSClientLogger<HomeController> logger,
+        ISubscriptionSignalService subscriptionSignalService) : base(applicationConfigRepository, appVersionService)
     {
         this.billingApiService = billingApiService;
         this.subscriptionRepo = subscriptionRepo;
@@ -192,7 +193,8 @@ public class HomeController : BaseController
             subscriptionLogsRepo,
             planRepository,
             userRepository,
-            loggerFactory.CreateLogger<PendingActivationStatusHandler>());
+            loggerFactory.CreateLogger<PendingActivationStatusHandler>(),
+            subscriptionSignalService);
 
         this.pendingFulfillmentStatusHandlers = new PendingFulfillmentStatusHandler(
             fulfillApiService,
@@ -223,7 +225,8 @@ public class HomeController : BaseController
             subscriptionLogsRepo,
             planRepository,
             userRepository,
-            this.loggerFactory.CreateLogger<UnsubscribeStatusHandler>());
+            this.loggerFactory.CreateLogger<UnsubscribeStatusHandler>(),
+            subscriptionSignalService);
     }
 
     /// <summary>

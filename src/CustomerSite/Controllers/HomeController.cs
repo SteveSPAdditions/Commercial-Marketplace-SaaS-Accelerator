@@ -144,7 +144,8 @@ public class HomeController : BaseController
         IWebNotificationService webNotificationService,
         IAppVersionService appVersionService,
         SaaSApiClientConfiguration saaSApiClientConfiguration,
-        ISetupStatusService setupStatusService) : base(appVersionService)
+        ISetupStatusService setupStatusService,
+        ISubscriptionSignalService subscriptionSignalService) : base(appVersionService)
     {
         this.saaSApiClientConfiguration = saaSApiClientConfiguration;
         this.setupStatusService = setupStatusService;
@@ -176,7 +177,8 @@ public class HomeController : BaseController
             subscriptionLogsRepo,
             planRepository,
             userRepository,
-            loggerFactory.CreateLogger<PendingActivationStatusHandler>());
+            loggerFactory.CreateLogger<PendingActivationStatusHandler>(),
+            subscriptionSignalService);
 
         this.pendingFulfillmentStatusHandlers = new PendingFulfillmentStatusHandler(
             apiService,
@@ -207,7 +209,8 @@ public class HomeController : BaseController
             subscriptionLogsRepo,
             planRepository,
             userRepository,
-            this.loggerFactory.CreateLogger<UnsubscribeStatusHandler>());
+            this.loggerFactory.CreateLogger<UnsubscribeStatusHandler>(),
+            subscriptionSignalService);
     }
 
     /// <summary>
