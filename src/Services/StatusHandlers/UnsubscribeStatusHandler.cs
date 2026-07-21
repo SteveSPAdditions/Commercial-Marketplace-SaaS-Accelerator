@@ -87,7 +87,7 @@ public class UnsubscribeStatusHandler : AbstractSubscriptionStatusHandler
                 };
                 this.subscriptionLogRepository.Save(auditLog);
 
-                this.subscriptionLogRepository.LogStatusDuringProvisioning(subscriptionID, "Unsubscribe Failed", SubscriptionStatusEnumExtension.UnsubscribeFailed.ToString());
+                this.subscriptionLogRepository.LogStatusDuringProvisioning(subscriptionID, "Unsubscribed Successfully", SubscriptionStatusEnumExtension.Unsubscribed.ToString());
             }
             catch (Exception ex)
             {

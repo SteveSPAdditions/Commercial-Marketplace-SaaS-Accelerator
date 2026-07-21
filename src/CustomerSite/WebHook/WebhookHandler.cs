@@ -210,31 +210,46 @@ public class WebHookHandler : IWebhookHandler
     /// <exception cref="NotImplementedException"> Exception.</exception>
     public async Task ChangeQuantityAsync(WebhookPayload payload)
     {
+        // This offer is single-quantity by design: exactly one subscription is ever required, so a
+        // quantity change must never be applied. ChangeQuantity is an operation-based action, so we
+        // reject it the same way Reinstate rejects: PATCH the Marketplace operation as Failure, which
+        // makes Azure revert the customer's change promptly, and leave the local DB untouched.
         var oldValue = this.subscriptionService.GetSubscriptionsBySubscriptionId(payload.SubscriptionId);
-        SubscriptionAuditLogs auditLog = new SubscriptionAuditLogs()
-        {
-            Attribute = Convert.ToString(SubscriptionLogAttributes.Quantity),
-            SubscriptionId = oldValue?.SubscribeId,
-            OldValue = oldValue?.Quantity.ToString(),
-            CreateBy = null,
-            CreateDate = DateTime.Now,
-        };
 
-        // we reject if the config value is set to false and the old quantity is not the same as the new quantity.
-        // if the old quantity is the same as new quantity then its a REVERT webhook scenario where we have to accept the change.
-        // we also reject if the subscription is not in the DB
-        var _acceptSubscriptionUpdates = Convert.ToBoolean(this.applicationConfigRepository.GetValueByName(AcceptSubscriptionUpdates));
-        if ((!_acceptSubscriptionUpdates && payload.Quantity != payload.Subscription.Quantity) || oldValue == null)
+        var patchOperation = await this.fulfillApiService.PatchOperationStatusResultAsync(
+            payload.SubscriptionId,
+            payload.OperationId,
+            Microsoft.Marketplace.SaaS.Models.UpdateOperationStatusEnum.Failure);
+
+        if (patchOperation != null && patchOperation.Status != 200)
         {
-            auditLog.NewValue = oldValue?.Quantity.ToString();
-            this.subscriptionsLogRepository.Save(auditLog);
-            throw new MarketplaceException("Quantity Change Request reject due to Config settings or Subscription not in database");
+            // Outbound Microsoft Fulfillment API call failed. Tag Stage=FulfillmentApi so this is
+            // distinguishable in App Insights from an in-project failure when the controller re-logs
+            // the rethrown exception as a 500.
+            this.logger.LogError(
+                "Webhook failed at {Stage}: PATCH operation returned {StatusCode} {ReasonPhrase} for SubscriptionId={SubscriptionId} OperationId={OperationId}.",
+                "FulfillmentApi", patchOperation.Status, patchOperation.ReasonPhrase, payload.SubscriptionId, payload.OperationId);
+            await this.applicationLogService.AddApplicationLog($"Quantity change rejection PATCH failed with status {patchOperation.Status} {patchOperation.ReasonPhrase}.").ConfigureAwait(false);
+            throw new Exception(patchOperation.ReasonPhrase);
         }
 
-        this.subscriptionService.UpdateSubscriptionQuantity(payload.SubscriptionId, payload.Quantity);
-        await this.applicationLogService.AddApplicationLog("Quantity Successfully Changed.").ConfigureAwait(false);
-        auditLog.NewValue = payload.Quantity.ToString();
-        this.subscriptionsLogRepository.Save(auditLog);
+        await this.applicationLogService.AddApplicationLog("Quantity Change Request Rejected: this offer is single-quantity by design.").ConfigureAwait(false);
+
+        // Audit the rejected attempt; quantity is deliberately left unchanged.
+        if (oldValue != null)
+        {
+            SubscriptionAuditLogs auditLog = new SubscriptionAuditLogs()
+            {
+                Attribute = Convert.ToString(SubscriptionLogAttributes.Quantity),
+                SubscriptionId = oldValue.SubscribeId,
+                OldValue = oldValue.Quantity.ToString(),
+                NewValue = oldValue.Quantity.ToString(),
+                CreateBy = null,
+                CreateDate = DateTime.Now,
+            };
+            this.subscriptionsLogRepository.Save(auditLog);
+        }
+
         await Task.CompletedTask;
     }
 
