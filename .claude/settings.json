@@ -13,7 +13,17 @@
       "Bash(python -c \"import json;json.load\\(open\\('SaaSAccelerator.Webhooks.postman_collection.json'\\)\\);json.load\\(open\\('SaaSAccelerator.Local.postman_environment.json'\\)\\);print\\('Both JSON files valid'\\)\")",
       "Bash(cat src/DataAccess/Contracts/ISubscriptionSiteRepository.cs)",
       "Bash(cat src/Services/Contracts/ISitePermissionService.cs)",
-      "Bash(xargs cat)"
+      "Bash(xargs cat)",
+      "Bash(python -c \"import json;json.load\\(open\\('tools/postman/SaaSAccelerator.Webhooks.postman_collection.json'\\)\\);print\\('collection OK'\\)\")",
+      "Bash(python -c \"import json;json.load\\(open\\('tools/postman/SaaSAccelerator.Local.postman_environment.json'\\)\\);print\\('env OK'\\)\")",
+      "Bash(git check-ignore *)",
+      "Bash(python -c \"import json;json.load\\(open\\('tools/postman/SaaSAccelerator.E5Dev.private.postman_environment.json'\\)\\);print\\('E5 env OK'\\)\")",
+      "Bash(git commit -m ' *)",
+      "Bash(dotnet build *)",
+      "Bash(dotnet tool *)",
+      "Bash(dotnet ef *)",
+      "Bash(git rev-list *)",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"https://rau-admin.azurewebsites.net/\" -MaximumRedirection 0 -ErrorAction Stop -TimeoutSec 25; \"STATUS: $\\($r.StatusCode\\)\" } catch { \"ERR/STATUS: $\\($_.Exception.Response.StatusCode.value__\\) $\\($_.Exception.Message\\)\" })"
     ]
   },
   "enabledPlugins": {
