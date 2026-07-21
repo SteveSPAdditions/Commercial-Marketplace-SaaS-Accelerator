@@ -72,7 +72,12 @@ public class Startup
         if (!string.IsNullOrWhiteSpace(aiConnStr)
             && aiConnStr.IndexOf("InstrumentationKey", StringComparison.OrdinalIgnoreCase) >= 0)
         {
-            services.AddApplicationInsightsTelemetry();
+            // Full-fidelity activity logging: disable the SDK's default adaptive sampling so
+            // nothing is dropped under load. The KeepAliveTelemetryProcessor below then filters
+            // out Azure "Always On" keep-alive pings, which would otherwise flood the logs.
+            services.AddHttpContextAccessor();
+            services.AddApplicationInsightsTelemetry(options => options.EnableAdaptiveSampling = false);
+            services.AddApplicationInsightsTelemetryProcessor<KeepAliveTelemetryProcessor>();
         }
 
         services.Configure<CookiePolicyOptions>(options =>
