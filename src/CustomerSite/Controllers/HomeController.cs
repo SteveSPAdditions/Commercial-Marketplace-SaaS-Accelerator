@@ -347,7 +347,7 @@ public class HomeController : BaseController
         }
         catch (Exception ex)
         {
-            this.logger.LogError($"Message:{ex.Message} :: {ex.InnerException}   ");
+            this.logger.Error($"Unhandled error in HomeController: {ex.Message}", ex);
             return this.View("Error", ex);
         }
     }
@@ -386,13 +386,18 @@ public class HomeController : BaseController
 
             this.pendingActivationStatusHandlers.Process(subscriptionId);
             await _webNotificationService.PushExternalWebNotificationAsync(subscriptionId, subscriptionParameters);
+            this.notificationStatusHandlers.Process(subscriptionId);
         }
-        catch (MarketplaceException fex)
+        catch (Exception ex)
         {
-            this.logger.Error(fex.Message);
+            // Activation itself commits its own status (PendingActivationStatusHandler has its own
+            // try/catch), so by this point the subscription is already activated. The web + email
+            // notifications are best-effort -- a failure here (e.g. missing Events/PlanEventsMapping
+            // seed data after a DB clear, or unconfigured SMTP) must NOT blank the customer's landing.
+            // Log WITH the exception (so it lands in the App Insights exceptions table with a stack)
+            // and continue to Setup.
+            this.logger.Error($"Auto-activation post-steps failed for subscription {subscriptionId} (non-fatal; activation already applied): {ex.Message}", ex);
         }
-
-        this.notificationStatusHandlers.Process(subscriptionId);
 
         if (this.saaSApiClientConfiguration?.RedirectActivateToSetup == true)
         {
@@ -450,7 +455,7 @@ public class HomeController : BaseController
         }
         catch (Exception ex)
         {
-            this.logger.LogError($"Message:{ex.Message} :: {ex.InnerException}   ");
+            this.logger.Error($"Unhandled error in HomeController: {ex.Message}", ex);
             return this.View("Error", ex);
         }
     }
@@ -486,7 +491,7 @@ public class HomeController : BaseController
         }
         catch (Exception ex)
         {
-            this.logger.LogError($"Message:{ex.Message} :: {ex.InnerException}   ");
+            this.logger.Error($"Unhandled error in HomeController: {ex.Message}", ex);
             return this.View("Error", ex);
         }
     }
@@ -522,7 +527,7 @@ public class HomeController : BaseController
         }
         catch (Exception ex)
         {
-            this.logger.LogError($"Message:{ex.Message} :: {ex.InnerException}   ");
+            this.logger.Error($"Unhandled error in HomeController: {ex.Message}", ex);
             return this.View("Error", ex);
         }
     }
@@ -556,7 +561,7 @@ public class HomeController : BaseController
         }
         catch (Exception ex)
         {
-            this.logger.LogError($"Message:{ex.Message} :: {ex.InnerException}   ");
+            this.logger.Error($"Unhandled error in HomeController: {ex.Message}", ex);
             return this.View("Error", ex);
         }
     }
@@ -592,7 +597,7 @@ public class HomeController : BaseController
         }
         catch (Exception ex)
         {
-            this.logger.LogError($"Message:{ex.Message} :: {ex.InnerException}   ");
+            this.logger.Error($"Unhandled error in HomeController: {ex.Message}", ex);
             return this.View("Error", ex);
         }
     }
@@ -676,7 +681,7 @@ public class HomeController : BaseController
         }
         catch (Exception ex)
         {
-            this.logger.LogError($"Message:{ex.Message} :: {ex.InnerException}   ");
+            this.logger.Error($"Unhandled error in HomeController: {ex.Message}", ex);
             return this.View("Error", ex);
         }
     }
@@ -1011,7 +1016,7 @@ public class HomeController : BaseController
         }
         catch (Exception ex)
         {
-            this.logger.LogError($"Message:{ex.Message} :: {ex.InnerException}   ");
+            this.logger.Error($"Unhandled error in HomeController: {ex.Message}", ex);
             return this.View("Error", ex);
         }
     }

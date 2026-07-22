@@ -68,7 +68,13 @@ public class EmailHelper
         string ccReceipents = string.Empty;
         string bccReceipents = string.Empty;
 
-        var eventData = this.planEventsMappingRepository.GetPlanEvent(planGuId, subscriptionEvent.EventsId);
+        // subscriptionEvent is null when the Events seed table is empty/missing (e.g. a DB that was
+        // cleared without re-seeding). Guard it so building the email degrades gracefully to "no
+        // plan-event override" instead of throwing an NRE that would bubble up and blank the caller's
+        // page. eventData staying null is already handled below.
+        var eventData = subscriptionEvent != null
+            ? this.planEventsMappingRepository.GetPlanEvent(planGuId, subscriptionEvent.EventsId)
+            : null;
 
         //First add To, Cc, Bcc email addresses from email template
         if (emailTemplateData != null)
