@@ -43,8 +43,10 @@ proof they identified the right tenant.
 
 ### Factual corrections to this spec
 
-- **§1 is out of date.** It states RAU runs `MarketplaceStatusSource = "Live"`. `Web.config` now reads
-  **`Cached`**. The conclusion (must live-verify before deleting) still holds — more strongly.
+- **§1 is correct on the mode.** `Web.config` reads `MarketplaceStatusSource = "Live"` (verified on disk
+  2026-07-22). *(An earlier revision of this note claimed it read `Cached` — that was wrong.)* The
+  must-live-verify-before-deleting conclusion holds regardless of mode, and would hold even more strongly
+  if it were ever flipped to `Cached`.
 - **§4's `AzureRegionSelectedByUpn` does not exist** anywhere in the solution. The only address captured
   at setup is **`TenantSiteCollections.BackupEmailAddress`** (with `BackupEmailAddressValidated`).
   Two consequences: it is **tenant-DB-resident**, so it must be captured **before** the drop; and it is

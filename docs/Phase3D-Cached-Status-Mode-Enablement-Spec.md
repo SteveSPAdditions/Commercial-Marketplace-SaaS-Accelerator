@@ -25,37 +25,71 @@ clean, 28/28 NUnit tests pass. Implementation notes:
   and the resubscribe reactivation — an `Activated` (newer `modifiedUtc`) applies over a stale
   `Unsubscribed` row, while a genuinely newer transition still wins.
 
-### 🔴 TWO BLOCKERS before flipping to `"Cached"` — both verified in the accelerator repo
+### ✅ Blocker 1 RESOLVED (accelerator `1f06354`) + 🟠 one runbook amendment before flipping to `"Cached"`
 
-**Blocker 1 — `"Activated"` fires at most ONCE per subscription id (sender-side).** The enqueue dedup
-`SubscriptionSignalService.cs:54-58` uses key `{eventType}|{sub:N}|{operationId:N}` with
-`operationId = Guid.Empty` on both new paths, so the key is a **constant per (eventType, subscriptionId)**.
-`GetByIdempotencyKey` (`NotificationOutboxRepository.cs:100-104`) does **not** filter on `DeliveredUtc`,
-and `MarkDelivered` (`:65-76`) **retains** the delivered row. So the first activation's row lives forever
-and suppresses every later `"Activated"` for that subscription — i.e. the **resubscribe case §0 says this
-exists to cover**. It would pass a single-cycle test and fail silently on the second cycle. Same
-single-shot property affects the portal-`"Unsubscribed"` path. **Fix is sender-side** (out of this spec's
-scope but gates the flip): make the key unique per occurrence (include `modifiedUtc` or a fresh GUID
-rather than `Guid.Empty`), or have `GetByIdempotencyKey` match only undelivered rows (the former is
-safer — the latter changes retry semantics). This depends on whether a resubscribe reuses the AMP
-subscription id (see below).
+**Blocker 1 — RESOLVED.** *Was: the `Guid.Empty` no-op-id paths used a constant dedup key
+`{eventType}|{sub:N}|000…0`; because `MarkDelivered` (`NotificationOutboxRepository.cs:65-76`) retains the
+delivered row and `GetByIdempotencyKey` (`:100-104`) does not filter `DeliveredUtc`, a same-key repeat
+would be suppressed.* Fixed sender-side in the accelerator — commit **`1f06354`**: `SubscriptionSignalService`
+now keys `Guid.Empty` occurrences uniquely (fresh GUID); webhook paths (real `operationId`) are unchanged.
+**`git pull` the accelerator main to pick it up.** This no longer gates the flip.
 
-**Blocker 2 — §3's "rollback is instant, no redeploy" is FALSE for the WebJob.** The WebJob (which runs
-the tenant-processing gate — the consumer that actually blocks customers) snapshots config once at
-startup via `OpenMappedExeConfiguration` (`Jobs.Events\Program.cs:79-80`); it does not re-read on access.
-Editing `Web.config` recycles the app pool (Web app + AppAddin2 see it immediately) but leaves the
-**running WebJob on the old value**. §3 steps 4 AND 5 must add **"restart the WebJob in the target
-region"** — to both the flip and the rollback — or the rollback claim is wrong exactly when it's needed.
+**Correction to the earlier scope note:** the `Suspend → Reinstate → Suspend` example was **wrong**.
+Webhook Suspend/Reinstate pass the **real Marketplace `payload.OperationId`** (`WebhookHandler.cs:335` and
+`:283`), not `Guid.Empty` — three distinct operations give three distinct keys, so no false dedup ever
+occurred. The only `Guid.Empty` paths are `"Activated"` and portal-`"Unsubscribed"`, and both are
+**terminal-once per sub id** (a subscription activates once, unsubscribes once; resubscribe = a *new* id),
+so no same-key repeat arose in practice either. The `1f06354` fix is belt-and-braces hardening, not a fix
+for an active defect.
 
-### 🟠 Open question that sets both blockers' severity + a 3-C interaction
+**🟠 Runbook amendment (was "Blocker 2") — §3's "rollback is instant, no redeploy" is right for the Web
+app but incomplete for the WebJob.** *Downgraded after tracing the code — this is a runbook gap, not a
+code defect, and not a hard blocker.*
 
-**Does a resubscribe reuse the AMP subscription id?**
-- **New id** → Blocker 1 doesn't bite `Activated` (keys differ), but `TenantRegions.SubscriptionId` holds
-  the OLD id until a `TenantRegionFanOut` lands; `ApplyPushedSubscriptionStatusAsync` only anchors that
-  column when it is **null**, never when it differs. ⚠ **This breaks Phase 3-C Stage B**, which
-  live-checks using `TenantRegions.SubscriptionId`: against the stale dead id it returns `Unsubscribed`
-  and would **confirm a purge for a customer who resubscribed under a new id**. Fold into 3-C.
-- **Same id reused** → Blocker 1 bites hard; `"Activated"` never fires on resubscribe.
+Code fact (certain): **both** hosts read the toggle from a one-time **file snapshot** —
+`OpenMappedExeConfiguration(web.config)` at `AppHost.cs:134` (Web app) and `Program.cs:80` (WebJob).
+Neither re-reads on access.
+- **Web app / AppAddin2:** editing `web.config` recycles w3wp → `AppHost` re-runs → re-snapshots, so their
+  gate flips **immediately**. §3's "instant, no redeploy" is correct for them. No redeploy anywhere — a
+  file edit, not a redeploy.
+- **WebJob** (the tenant-processing gate — the consumer that actually blocks customers): `Main` runs once
+  then `host.RunAsync` (`Program.cs:418`) blocks for the process lifetime, so `_configuration` is frozen
+  at **WebJob-process-start**. It only changes when the **WebJob process restarts**. In prod a `web.config`
+  edit restarts the App Service and continuous WebJobs restart with it, so it *usually* propagates — but
+  via a restart (startup lag + a brief gap in processing), not a hot-swap, and not something to bet an
+  emergency rollback on unverified. In **dev** (console-hosted WebJob) there is no auto-restart — restart
+  it by hand (as seen 2026-07-20).
+
+**Two concrete runbook items:**
+1. §3 steps 4 AND 5: add **"restart the WebJob in the target region and confirm it logged the new
+   `MarketplaceStatusSource` at startup"** — to both the flip and the rollback. Cheap insurance; removes
+   the ambiguity during an incident, when you don't want to be guessing whether a continuous WebJob
+   recycled.
+2. **The flip MUST be a `web.config` FILE edit.** Because both hosts read the physical file via
+   `OpenMappedExeConfiguration`, a portal **App Service Application Setting** named `MarketplaceStatusSource`
+   is injected as an env var and **silently ignored** by this code path — the toggle would appear to do
+   nothing. (Applies to the Web app too, not just the WebJob.)
+
+One-time: **verify** whether a `web.config` edit reliably restarts your continuous WebJobs in prod. If
+yes, item 1 is belt-and-braces; if no, it is mandatory.
+
+### ✅ ANSWERED (accelerator trace, 2026-07-22): a resubscribe gets a NEW AMP subscription id
+
+Confirmed in the accelerator (`SubscriptionsRepository.Save` keys on `AmpsubscriptionId`; Marketplace
+issues a new subscription GUID per purchase). See the matching trace in the Phase 3-C spec. Two
+consequences:
+
+- **This re-scopes Blocker 1** (now RESOLVED — see above). A resubscribe's `"Activated"` carries the
+  **new** sub id, so its key differs and it fires normally. The `Guid.Empty` dedup never touched webhook
+  Suspend/Reinstate (those carry real, distinct `payload.OperationId`s), and the only `Guid.Empty` paths
+  (`Activated`, portal-`Unsubscribed`) are terminal-once per sub id — so no active defect existed. The
+  accelerator fix (`1f06354`) hardens it regardless.
+- **The Phase 3-C purge false-positive is closed by deploying this receiver first.** Because `"Activated"`
+  updates the cache **by tenant** (`FarmId`), independent of the stale `TenantRegions.SubscriptionId`, a
+  resubscriber's cache flips to `Subscribed` → 3-C Stage A never nominates them → the stale-id Stage B
+  live-check never runs for them. **Hard ordering: deploy this 3-D receiver to every region BEFORE
+  enabling the 3-C purge job.** The dangerous window is exactly "3-D receiver not deployed **and** fan-out
+  not re-landed" — see the 3-C trace.
 
 ### Endorsed as-is
 
