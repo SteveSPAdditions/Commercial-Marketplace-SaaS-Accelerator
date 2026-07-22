@@ -101,8 +101,9 @@ public class UnsubscribeStatusHandler : AbstractSubscriptionStatusHandler
                 // Signal RAU that the subscription is now unsubscribed. The webhook-driven unsubscribe
                 // already signals; this covers the portal-initiated (Fulfillment DELETE) path, which
                 // otherwise never reaches RAU's cache -- a real access leak once
-                // MarketplaceStatusSource="Cached". No Marketplace operation id here, so key idempotency
-                // on the subscription alone via Guid.Empty. Best-effort; the signal service never throws.
+                // MarketplaceStatusSource="Cached". No Marketplace operation id here -- pass Guid.Empty;
+                // the signal service keys such occurrences uniquely (delivered outbox rows are retained,
+                // so a constant key would suppress future signals). Best-effort; the service never throws.
                 this.subscriptionSignalService?.EnqueueSubscriptionSignal(subscriptionID, "Unsubscribed", Guid.Empty);
             }
             catch (Exception ex)

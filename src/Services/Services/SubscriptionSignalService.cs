@@ -51,7 +51,16 @@ public class SubscriptionSignalService : ISubscriptionSignalService
                 return;
             }
 
-            var idempotencyKey = $"{eventType}|{ampSubscriptionId:N}|{operationId:N}";
+            // Internal-transition signals (activation, portal-unsubscribe) carry no Marketplace
+            // operation id and pass Guid.Empty. A constant {eventType}|{sub:N}|000…0 key is a footgun:
+            // the outbox RETAINS delivered rows (MarkDelivered only stamps DeliveredUtc) and
+            // GetByIdempotencyKey does NOT filter on DeliveredUtc, so the first delivered row would
+            // suppress every future same-key signal for that subscription forever. These paths have no
+            // external redelivery to dedup (the handler fires once per committed transition), so key
+            // them uniquely per occurrence instead. Webhook paths pass a real operationId and are
+            // unchanged -- their dedup of Microsoft/buffer redeliveries is preserved.
+            var dedupOperationId = operationId == Guid.Empty ? Guid.NewGuid() : operationId;
+            var idempotencyKey = $"{eventType}|{ampSubscriptionId:N}|{dedupOperationId:N}";
             if (outboxRepo.GetByIdempotencyKey(idempotencyKey) != null)
             {
                 // Already enqueued for this operation (webhook redelivery). No-op.

@@ -105,8 +105,9 @@ public class PendingActivationStatusHandler : AbstractSubscriptionStatusHandler
                 // Signal RAU that the subscription is now active. This is what flips RAU's cached
                 // MarketplaceSubscriptionStatus back to Subscribed on a resubscribe (the only path that
                 // does so once MarketplaceStatusSource="Cached"; inert but harmless under "Live"). No
-                // Marketplace operation id is available here, so key idempotency on the subscription
-                // alone via Guid.Empty. Best-effort; the signal service never throws.
+                // Marketplace operation id here -- pass Guid.Empty; the signal service keys such
+                // occurrences uniquely (delivered outbox rows are retained, so a constant key would
+                // suppress future signals). Best-effort; the signal service never throws.
                 this.subscriptionSignalService?.EnqueueSubscriptionSignal(subscriptionID, "Activated", Guid.Empty);
             }
             catch (Exception ex)
