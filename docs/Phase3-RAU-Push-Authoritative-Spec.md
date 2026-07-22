@@ -8,6 +8,33 @@
 > The producer side (the SaaS Accelerator) is already done and deployed-ready. This spec implements the
 > **consumer** side.
 
+---
+
+## ✅ IMPLEMENTATION STATUS — 2026-07-21 (RAU side, NOT yet checked into TFVC)
+
+**B1–B4 all implemented.** Both targets build clean (.NET Framework 4.7.2 + .NET 8 AzRSvc), 26/26 NUnit
+tests pass. **Nothing is checked in** — 17 files pending in the Legeris TFVC workspace.
+
+Three defects were found in the delivered implementation *after* this spec was written and have been
+fixed; a further eight are covered by
+[Phase3B-RAU-Receiver-Hardening-Spec.md](Phase3B-RAU-Receiver-Hardening-Spec.md) (all now done):
+
+| Found | Fix |
+|---|---|
+| **Ghost-id resolution.** `TenantRegions.TenantId` is the REAL Entra id, but `Tenants.TenantId`, the per-tenant DB name and `Subscriptions.FarmId` are the **DB-side ("ghost")** id in dev. All four Phase 3 sites looked up `MdbTenant`/`FarmId` with the real id → matched nothing → handler reported `applied` having updated zero rows. | New `DbSideTenantId()` inverse of `RealTenantId()` in `ServiceInterface\Extensions\StingExtensions.cs`, applied at all four sites. AzRSvc uses its pre-existing `SwapIfTestTenantRealTenantId()` (the Web helper needs `WebConfigurationManager`, absent on .NET 8). **The reverse lookup MUST require a Guid-shaped key suffix** — `TestTenantRealTenantId-xjyg4.sharepoint.com` is a HOST-keyed alias pointing at the same real tenant and sorts first. |
+| **Multi-host config source.** `ResolveSetupStateInProcess` runs in three hosts, each passing its own `Configuration`. The cached reader used ambient `WebConfigurationManager` — Web.config (87 keys) in the Web app, but the **WebJob EXE's own app.config (6 keys, no ghost mappings)** in `Jobs.Events`. | Read the caller-supplied `configuration`, never `WebConfigurationManager`, inside `ResolveSetupStateInProcess`. (That is why the parameter exists, and why `Jobs.Events` carries its own `RealTenantId()` copy.) |
+| **B3 was unreachable.** The corrector sat at the end of `SaaSInitialiseTenantRegionsHandler.Get`, behind four early returns (missing config, `FetchSnapshot` throw, malformed snapshot). Those return normally, so the orchestrator set `succeeded = true` and armed the shared 24h gate — in local dev (rau-admin unreachable) the corrector ran **never**. | Moved to `SaaSInitialiseSubscriptionsHandler` as an independent step with its own try/catch and its **own** daily gate. `_saaSInitialisedUtc` split into `_saaSRegionsInitialisedUtc` / `_saaSSubscriptionsInitialisedUtc`, each armed only on genuine success (the region step now checks `SnapshotCount >= 0`, because "didn't throw" was never proof). |
+
+**Deviation from §2 worth knowing:** the spec said an un-provisioned tenant should be a benign no-op.
+It is now **Critical + 503** — silently reporting `applied` for a write that touched nothing is what
+concealed the ghost-id bug. See Phase 3-B F2/F8a for the ordering-guard rework that accompanies this.
+
+**⚠ Deploy ordering:** Phase 3-B added `Subscriptions.MarketplaceStateAsOfUtc`. OrmLite emits explicit
+column lists, so every `Select<Subscription>` fails against an un-migrated tenant DB. Deploy the **web
+app (migration runner) before AzRSvc** and before any WebJob tick.
+
+---
+
 ## 0. Objective & decisions already made (do not re-litigate)
 
 Enable **testability of subscription lifecycle without touching Azure billing**: an operator replays a

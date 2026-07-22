@@ -9,6 +9,114 @@
 > **Scope of this pass: UNSUBSCRIBE only.** Trial-expiry purge is explicitly out of scope and must
 > not be implemented here, even though the same job will later grow a trial arm.
 
+---
+
+## ⚠ STATUS — 2026-07-21: REVIEWED AND REDESIGNED, JOB NOT BUILT
+
+**Read this section before implementing anything below — §3 and §4 have materially changed, and two
+statements in §1/§4 are factually wrong.**
+
+### The job is now NON-DESTRUCTIVE (supersedes §3)
+
+The job **does not drop databases**. It detects candidates and emails **team@spadditions.com** a link to
+an operator-initiated endpoint that performs the deprovisioning. This removes the catastrophic failure
+modes rather than mitigating them.
+
+The link deliberately **omits a `code=`** the operator must look up — an anti-fat-finger interlock plus
+proof they identified the right tenant.
+
+- **Interlock value = `TenantRegions.SubscriptionId`.** Per-tenant, GUID entropy, **master-resident** so
+  it survives the tenant-DB drop and needs no Graph call or live consent.
+- *Rejected:* the per-tenant `EnterpriseApplicationObjectId` — it only exists at token-mint time (it is a
+  response field on `LfsoValidate`/`LfsoLibraryEnabledStatus`, never persisted) and is **unobtainable
+  once consent is withdrawn**, which is the common post-unsubscribe state.
+- *Rejected:* a publisher-side constant (the SP Additions app's own object id) — identical for every
+  tenant, so it proves nothing about *which* tenant and stops being a speed bump after the first use.
+- **The code must NOT appear in the notification email**, or the interlock is theatre.
+- **`code=` is a second factor, not authorisation.** The endpoint still needs real auth: the code proves
+  *which*, auth proves *who*.
+- The endpoint must **re-run the Stage B live check at click time** — the email may be days old. This is
+  where §1's rule now lives.
+- The customer email (§4) is sent **by the endpoint after a successful purge**, not with the ops
+  notification — do not tell a customer their data is gone before it is.
+- §5's config keys now govern *notification*, not deletion, and should be renamed accordingly.
+
+### Factual corrections to this spec
+
+- **§1 is out of date.** It states RAU runs `MarketplaceStatusSource = "Live"`. `Web.config` now reads
+  **`Cached`**. The conclusion (must live-verify before deleting) still holds — more strongly.
+- **§4's `AzureRegionSelectedByUpn` does not exist** anywhere in the solution. The only address captured
+  at setup is **`TenantSiteCollections.BackupEmailAddress`** (with `BackupEmailAddressValidated`).
+  Two consequences: it is **tenant-DB-resident**, so it must be captured **before** the drop; and it is
+  **per site collection**, so a tenant may have several — prefer rows where
+  `BackupEmailAddressValidated != null`.
+
+### Prerequisites — both DONE
+
+| | |
+|---|---|
+| **Stage A could never select anyone.** The reconcile stamped `MarketplaceStateAsOfUtc = now` every pass, so it never aged past a day and `StateAsOfUtc <= UtcNow - 7 days` was never true. The job would have been silently inert forever. | ✅ Fixed. `SaaSInitialiseSubscriptionsHandler.NextStateAsOfUtc` advances the clock **only when the live status differs from the cached status**, stamps a baseline when null, otherwise leaves it. Note this also means §2's "the unsubscribe time the push carried" is only true for push-populated rows; reconcile-populated rows carry the first-observation time (conservative — it can only delay, never trigger early). |
+| **§2's "404 → purge" was unimplementable and failed dangerously.** `GetSubscriptionInfo` returned `null` for 404, 403, 5xx, timeouts *and* missing config alike — so an expired `MarketplaceFulfillmentClientSecret` would have made **every** subscription look purged. | ✅ Fixed. New `MarketplaceFulfillmentClient.GetSubscription(...)` returns `MarketplaceSubscriptionLookup { Outcome = Found \| NotFound \| Indeterminate, Info, Detail }`. **Only an explicit HTTP 404 yields `NotFound`.** The purge path may act on `NotFound` and must **never** act on `Indeterminate`. `GetSubscriptionInfo` is retained as a wrapper so existing fail-closed gate callers are unchanged. |
+
+### Still open before building the job
+
+1. **§3's revoke-fails-blocks-drop deadlocks on the most likely state.** After unsubscribe customers
+   commonly remove the enterprise app / withdraw consent, so the Graph mint fails (`AADSTS700016`),
+   revoke "fails", and the tenant is dead-lettered and **never purged** — the opposite of the GDPR
+   intent. Needs two branches: *consent/app gone* → nothing to revoke and nothing we can do → **success,
+   proceed**; *transient Graph failure* → abort and retry.
+2. **§3 step 5 deletes only the home-region `TenantRegion`, but those rows are replicated** to every
+   master. Note `Migrate.cs:104` has exactly that delete **deliberately commented out** — understand
+   that precedent before re-introducing it.
+3. **Reuse the existing purge path.** `Migrate.cs` already deletes `MdbTenant` (cascading
+   `SiteCollections` via FK), deletes `ZoHoSubscriptions` rows, and has a `DeleteMigratedDatabase` arm
+   that drops a tenant DB.
+4. **Confirm Azure SQL PITR retention** per region and write it into the spec — it is the real recovery
+   path if a purge turns out to be wrong, and the audit record alone is not one.
+5. **Dedup the ops notification** (marker in master, not the tenant DB) so team@ is not emailed daily
+   per tenant.
+6. §5's "run after reconcile" is not guaranteed — reconcile has its own daily gate. Harmless, since
+   Stage B is the real guard, but do not depend on the ordering.
+
+### 🔑 Stage A is the real guard, not Stage B — and a hard ordering prerequisite (accelerator-side trace, 2026-07-22)
+
+Traced end-to-end from the accelerator. **Correction to item 6 above: "Stage B is the real guard" is
+wrong.** The real guard is **Stage A + the accelerator's `"Activated"` push**, because that push updates
+the cache **by tenant, not subscription id**:
+
+- Resubscribe = a **new** AMP subscription id (`SubscriptionsRepository.Save` keys on `AmpsubscriptionId`;
+  Marketplace issues a new GUID per purchase).
+- The `"Activated"` push fires on activation (before Setup) carrying `assignedTenantId = PurchaserTenantId`.
+- The receiver resolves by **tenant id** and updates `Select<Subscription>(s => s.FarmId ==
+  dbSideTenantGuid)` (`SaasAcceleratorEventHandler.cs:599`) — tenant-keyed, **independent of the stale
+  `TenantRegions.SubscriptionId`**. So an active resubscriber's cache flips to `Subscribed`, and **Stage A
+  never nominates them → Stage B never runs for them.**
+
+Stage B is only reached for still-`Unsubscribed`-cached tenants, and its `TenantRegions.SubscriptionId`
+live-check **can legitimately be stale**: that column is only re-anchored to the new id by a
+`TenantRegionFanOut` (`RegisterInRegionAsync:468`), which fires only if the customer re-selects region in
+Setup — but the `TenantRegion` row is keyed by **tenant** and persists, so the app can be used on
+resubscribe without ever re-firing the fan-out. So Stage B's recorded id can point at the old, deleted
+subscription and 404 → falsely confirm a purge.
+
+**The dangerous window needs BOTH:** the Phase 3-D `"Activated"` receiver not yet deployed (push
+202-dropped, cache stays `Unsubscribed`) **and** the fan-out not re-landed (stale sub id).
+
+**Therefore — hard prerequisite: do NOT enable this purge job until the Phase 3-D `"Activated"` receiver
+is deployed to every region** (see [Phase3D-Cached-Status-Mode-Enablement-Spec.md](Phase3D-Cached-Status-Mode-Enablement-Spec.md)).
+Once it is, Stage A's per-tenant cache is authoritative and the stale-sub-id problem never reaches a real
+customer. Belt-and-suspenders (optional): the operator endpoint should treat a live `NotFound`/
+`Unsubscribed` as **inconclusive** (abort, do not purge) when the tenant DB cache reads `Subscribed`.
+
+### Endorsed as-is
+
+Two-stage nominate-then-live-verify; re-verifying inside the action boundary; revoke-before-drop
+ordering; `Enabled=false` + `DryRun=true` + batch cap defaults (add: require **both** `Enabled=true`
+**and** `DryRun=false` to act, and log the mode at startup); keeping it out of the reconcile's failure
+domain; trial-expiry excluded.
+
+---
+
 ## 0. Policy (locked)
 
 - On unsubscribe, RAU keeps everything for a **7-day grace window**, then purges.

@@ -9,6 +9,70 @@
 > That spec defined the feature; this one fixes defects found in the delivered implementation.
 > Do not re-litigate the locked decisions in section 0 of that document.
 
+---
+
+## ✅ IMPLEMENTATION STATUS — 2026-07-21 (RAU side, NOT yet checked into TFVC)
+
+**All eight findings implemented (F1–F8).** Reviewed first against both sides of the wire — every
+finding was confirmed real, no false positives. Both targets build clean, 26/26 NUnit tests pass.
+
+| # | Status | Notes |
+|---|---|---|
+| **F1** | ✅ | `VerifyHmac`/`VerifyHmacWithSecret` return `LfsoServices.HmacVerification { Ok, Mismatch, NotConfigured }`. Unset secret → Critical + **503**. Secret checked FIRST so it outranks a missing header; an unset secret can still never return `Ok`. |
+| **F2** | ✅ | New nullable `Subscriptions.MarketplaceStateAsOfUtc [datetime2](7)` — model + `365BaseTables.sql` + migration `SQL365\1.2026.0721.1205.sql` + csproj `<Content Include>`. No backfill (null ⇒ apply). |
+| **F3** | ✅ | `ResolveTenantBySubscriptionId` now applies the isolation rule via shared `IsRegionInThisIsolationScope`. Trigger re-verified sender-side at `SubscriptionSignalService.cs:66`. |
+| **F4** | ✅ | `LhDevRegions` is now `static readonly string[]` with exact case-insensitive matching; zero regions → `FanOutConfigurationError` sentinel → 503; `azRegions` trimmed; unset `azRegion` is a hard error. |
+| **F5** | ✅ | Missing `subscriptionStatus` → 400 (Critical-logged). Dead `saasSubscriptionId == null` check removed. |
+| **F6** | ✅ | Option (a): unhandled path returns 202 **without** persisting `SaasEventLog`. Body is now `{"status":"unhandled-event-type"}`. |
+| **F7** | ✅ | **Fixed differently — see below.** |
+| **F8a–f** | ✅ | (a) atomic set-based `UpdateOnly` with the guard in the WHERE. (b) `ShouldApplyFanOut` using `Modified ?? Created`. (c) key derived from **signed body fields**; opt-in `SaasEventMaxAgeMinutes` (default 0). (d) per-region exception logging. (e) JSON via `JsonConvert`. (f) length validation → 400. |
+
+### Corrections to this spec found during implementation
+
+- **§2 (F2): the Fulfillment payload has no state-change timestamp.** `MarketplaceSubscriptionInfo`
+  carries only `MarketplaceCreatedUtc` and term dates. Reconcile therefore writes the pull time.
+- **§F2's schema note understated the ceremony.** This repo requires model + `365BaseTables.sql` +
+  a **new dated** `SQL365\*.sql` + a csproj `<Content Include>`, and a deploy-ordering constraint
+  (web app before AzRSvc) because OrmLite emits explicit column lists.
+- **§F8c: the sender's key cannot be verified.** It embeds an `operationId` that is not a body field.
+  The key is now derived from body fields alone and the header is logged for correlation only. This is
+  safe because the sender persists `EventJson` at enqueue (`SubscriptionSignalService.cs:76`), so every
+  retry sends a byte-identical body — and it closes the replay-bypass by construction.
+- **The retry table omits that 409 is also `Delivered`** (`LegerisSignalingDispatcher.ClassifyResponse`).
+- **F8b residual, accepted:** `TenantRegion.Modified` is a WRITE clock, so a reconcile raises the bar and
+  can skip a stale in-flight fan-out. Accepted to avoid a master-DB schema change; documented in the
+  method's XML doc.
+
+### F7 — fixed by removing the SaaS usage, not by changing the PK
+
+The deployed PK **is** on `SiteId` alone (confirmed: `PK__ZoHoSubs__B9DCB963…`), so the finding was real —
+and worse than "medium": every SaaS pending row used `SiteId = Guid.Empty` and lived from purchase until
+the customer finished onboarding (days/weeks), so the **second SaaS purchase in a region failed** until
+the first completed.
+
+Rather than widen the PK, the SaaS usage was **removed entirely**. `ZoHoSubscriptions` is the ZoHo
+billing-webhook cache and should never have carried SaaS rows, and the row was redundant:
+`InitialiseSaasTenant` now takes the subscription id from `TenantRegions.SubscriptionId` and the
+plan/status from the live Fulfillment `setupState` (which it already preferred). Our own reconcile
+handler already documented that "the TenantRegions row alone is sufficient to drive DB creation".
+No schema change was needed.
+
+Also found: the `ZoHoSubscriptions.Provider` column added by the Phase 7 plan is **inert**. No matching
+property was ever added to the `ZoHoSubscription` model, so nothing ever wrote it (every SaaS row reads
+`ZoHoBilling`) and nothing reads it. Optional drop included in the manual cleanup script.
+
+**⚠ MANUAL TSQL required on each master (dev/uk/ca/usa):** delete the stray
+`ZoHoSubscriptions` rows where `SiteId = '00000000-0000-0000-0000-000000000000'` (scoped to the sentinel,
+so genuine ZoHo rows are untouched), plus the optional `Provider` column drop.
+
+### Gap this spec did not cover
+
+`ClassifyPushOutcome` 503s on `rowCount == 0`, which retries ~52h on a condition that may never clear
+(a provisioned tenant DB with genuinely no `Subscriptions` rows). That is the mirror of §0's rule 2 and
+is still **undecided** — stays 503, or becomes a logged 200.
+
+---
+
 ## 0. Context
 
 Task B1 (receiver cases + `ApplyPushedSubscriptionStatusAsync`) is **implemented and correct in its core
