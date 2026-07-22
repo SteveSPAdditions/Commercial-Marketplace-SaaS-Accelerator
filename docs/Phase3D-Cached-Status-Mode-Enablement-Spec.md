@@ -111,6 +111,49 @@ customer re-selects region, but the `TenantRegion` row persists by tenant so it 
 stays stale `Unsubscribed`, and a resubscriber with a stale `TenantRegions.SubscriptionId` could be
 falsely purged. This receiver is therefore a prerequisite for BOTH the `Cached`-mode flip and the 3-C job.
 
+### 🟠 Alert-noise fix — "tenant not resolvable" logs Critical on every retry (found 2026-07-22)
+
+Symptom (observed): a fresh purchase whose RAU tenant isn't provisioned yet emits an `"Activated"` push
+that 503s repeatedly with `tenant not resolvable`, and **each retry logs `LogSeverity.Critical`
+(`SaasAcceleratorEventHandler.cs:329`)** — so a Critical-wired alert fires an email per attempt (~12 over
+the outbox backoff). This is an **expected, self-clearing** state during onboarding (the tenant provisions
+only when the customer completes AppAddin2 Setup), not an operational emergency.
+
+`:329` logs *every* apply-error at Critical, then returns 503:
+```csharp
+Loging.Log($"SaasAcceleratorEvent {idempotencyKey}: {applyError}", Logger, LogSeverity.Critical);
+return JsonResult(HttpStatusCode.ServiceUnavailable, "error", applyError);
+```
+Don't blanket-lower it — a genuine config error (`"no connection string for MasterDb…"`) should stay loud.
+Make it **age-based**: unresolvable is normal for a while after purchase; still-unresolvable long after the
+event means genuinely stuck.
+```csharp
+// Warning during the expected onboarding window; Critical only if the event is old (stuck tenant).
+var stuck = (DateTime.UtcNow - modifiedUtc.Value) > TimeSpan.FromHours(12); // reuse a config knob if present
+Loging.Log($"SaasAcceleratorEvent {idempotencyKey}: {applyError}",
+    Logger, stuck ? LogSeverity.Critical : LogSeverity.Warning);
+```
+Zero alerts during normal onboarding, one near dead-letter if truly stuck. Also drop the **duplicate**
+Critical inside the "no provisioned tenant DB" path (~`:589`) to Warning — it double-logs with `:329`.
+
+### ✅ A dead-lettered `"Activated"` is HARMLESS for a first-time / just-wiped tenant
+
+Because the onboarding timeline is unbounded (customer may take days across Customer-portal + AppAddin2),
+the `Activated` push can dead-letter (~52h) before the tenant provisions. **That loses nothing here:**
+
+1. Under `"Live"` the gate reads `SubscribedActive` from the **live Fulfillment pull**, not the cache — the
+   `Activated` push only writes the display-only cached status.
+2. When Setup completes, **`InitialiseSaasTenant` inserts the `Subscription` row with
+   `MarketplaceSubscriptionStatus` from a fresh live pull** (`= Subscribed`) and `StateAsOfUtc = now` — the
+   cache ends up correct **independent of the push**.
+3. Even a late-delivered `Activated` (modifiedUtc = activation time) is **F2-guard-skipped as stale** once
+   provisioning stamps a newer `StateAsOfUtc`. Deliver-late or dead-letter → identical outcome.
+
+The **only** case a lost `Activated` matters: `"Cached"` mode **and** a resubscribe onto a *pre-existing*
+tenant DB (provisioning doesn't re-run, so the push is the only thing flipping `Unsubscribed → Subscribed`)
+— and even there the **daily reconcile** is the backstop. So: do not shorten the retry window or otherwise
+engineer around the onboarding timeline; just fix the log severity above.
+
 ---
 
 ## 0. Why this exists
@@ -160,6 +203,14 @@ After this, verify `"Activated"` no longer reaches the `default`/unhandled branc
   `PurchaserTenantId` is reliably populated at activation time**; if it can be empty, the receiver
   falls to `ResolveTenantBySubscriptionId`, which needs the resubscribe's `TenantRegionFanOut` (new
   sub id) to have landed first. Log a warning if an `"Activated"` arrives with `Guid.Empty` tenant id.
+  - ⚠ **This fixes only the `Subscription` table, NOT `TenantRegions.SubscriptionId`.** The apply is
+    tenant-keyed (`FarmId`), so the cache flips correctly; but `TenantRegions.SubscriptionId` keeps the
+    **old** sub id (`ApplyPushedSubscriptionStatusAsync` anchors that column only when it is null, never
+    when it differs — it is re-anchored to the new id only by a `TenantRegionFanOut`, which fires only if
+    the customer re-selects region in Setup). That deliberately-stale column is exactly why the Phase 3-C
+    purge must lean on **Stage A**, not the Stage B sub-id live-check — see the "Downstream dependency"
+    section above and the 3-C trace. Both statements are individually correct; do not read this bullet in
+    isolation from that constraint.
 - **F2 guard interaction.** `"Activated"` carries `modifiedUtc = now`. Against a stale
   `Unsubscribed` row (older `MarketplaceStateAsOfUtc`), the guard applies it → cache flips to
   `Subscribed`. A genuinely newer push (e.g. an immediate suspend) still wins. This is exactly the
@@ -177,10 +228,20 @@ After this, verify `"Activated"` no longer reaches the `default`/unhandled branc
    `MarketplaceSubscriptionStatus = Subscribed` cached. A `null` cache is safe (`GetSetupStateInternal`
    falls back to live), but a **stale `Unsubscribed`** (left by a Live-mode unsubscribe→resubscribe)
    would block a real customer the instant you flip. Reconcile clears those.
-4. **Flip `MarketplaceStatusSource` to `"Cached"`** in `Web.config` — per region, ideally one region
-   first. **Rollback = set it back to `"Live"`; instant, no redeploy.**
+4. **Flip `MarketplaceStatusSource` to `"Cached"`** — per region, ideally one region first.
+   - ⚠ **Edit the `web.config` FILE, not an App Service Application Setting.** Both hosts read the
+     physical file via `OpenMappedExeConfiguration`; a portal App Setting of the same name is injected as
+     an env var and **silently ignored** (see the runbook amendment above).
+   - ⚠ **Then restart the WebJob in that region and confirm it logged the new `MarketplaceStatusSource`
+     at startup.** The Web app/AppAddin2 pick up the file edit on w3wp recycle immediately, but the
+     WebJob (the tenant-processing gate) holds a config snapshot frozen at process start and only changes
+     on restart.
+   - **Rollback = set it back to `"Live"` (file edit) — no redeploy. NOT fully "instant": the Web app
+     reverts on recycle, but you must restart the WebJob again for its gate to revert.** Do not assume a
+     continuous WebJob auto-recycled on the config edit unless you have verified that behaviour in prod.
 5. **Monitor:** gate-block rate, `"Activated"` apply counts, reconcile corrections, and any
-   `"Activated"`-with-empty-tenant warnings. A spike in blocks ⇒ roll back to `"Live"` and diagnose.
+   `"Activated"`-with-empty-tenant warnings. A spike in blocks ⇒ roll back to `"Live"` (per step 4's
+   rollback note — WebJob restart included) and diagnose.
 
 ## 4. Tests (`Legeris.Office365.Tests`, NUnit — extend `UnitTest1-Phase3RauPush.cs`)
 
