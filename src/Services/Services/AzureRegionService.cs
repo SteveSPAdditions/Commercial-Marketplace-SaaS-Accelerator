@@ -55,6 +55,12 @@ public class AzureRegionService : IAzureRegionService
         }
 
         var errors = new List<string>();
+
+        // Remembers the first reachable (HTTP 200) response that couldn't identify the tenant but still
+        // returned a selector list -- see the AzRegion=="?" branch. Surfaced after the loop when no region
+        // identifies the tenant, in preference to the static fallback.
+        TenantRegionInfo unassignedWithSelectors = null;
+
         foreach (var (region, url) in candidates)
         {
             try
@@ -86,8 +92,24 @@ public class AzureRegionService : IAzureRegionService
                 var azRegion = string.IsNullOrWhiteSpace(parsed.AzRegion) ? "?" : parsed.AzRegion;
                 if (azRegion == "?")
                 {
-                    // This region's Function1 reachable but couldn't identify the tenant; try next.
-                    errors.Add($"[{region}] AzRegion=?");
+                    // Reachable, but this region can't identify the tenant (e.g. a new/unassigned tenant
+                    // with no TenantRegions row). Its AzureRegionSelectors are still the authoritative,
+                    // tenant-aware pick list -- Function1 gates E5 -> DEV/LH server-side -- so DON'T discard
+                    // them. Remember the first such response and keep scanning: if a later region DOES
+                    // identify the tenant, that answer wins; otherwise these live selectors are surfaced
+                    // after the loop, ahead of the static fallback.
+                    if (unassignedWithSelectors == null && parsed.AzureRegionSelectors?.Count > 0)
+                    {
+                        unassignedWithSelectors = new TenantRegionInfo
+                        {
+                            AzRegion = "?",
+                            AzureRegionSelectors = parsed.AzureRegionSelectors,
+                            Error = parsed.Error,
+                            IsFallback = false,
+                        };
+                    }
+
+                    errors.Add($"[{region}] AzRegion=? ({parsed.AzureRegionSelectors?.Count ?? 0} selectors)");
                     continue;
                 }
 
@@ -107,6 +129,13 @@ public class AzureRegionService : IAzureRegionService
             {
                 errors.Add($"[{region}] {ex.GetType().Name}: {ex.Message}");
             }
+        }
+
+        // No region identified the tenant. Prefer a live, tenant-aware selector list from an unassigned
+        // (AzRegion="?") response over the static fallback -- Function1 is the authority (incl. E5 DEV/LH).
+        if (unassignedWithSelectors != null)
+        {
+            return unassignedWithSelectors;
         }
 
         return this.FallbackResponse("All AzRegionSvc endpoints failed: " + string.Join("; ", errors));
