@@ -111,30 +111,31 @@ customer re-selects region, but the `TenantRegion` row persists by tenant so it 
 stays stale `Unsubscribed`, and a resubscriber with a stale `TenantRegions.SubscriptionId` could be
 falsely purged. This receiver is therefore a prerequisite for BOTH the `Cached`-mode flip and the 3-C job.
 
-### 🟠 Alert-noise fix — "tenant not resolvable" logs Critical on every retry (found 2026-07-22)
+### ✅ Alert-noise fix — DONE 2026-07-23, implemented transient-scoped (not a pure age gate)
 
 Symptom (observed): a fresh purchase whose RAU tenant isn't provisioned yet emits an `"Activated"` push
-that 503s repeatedly with `tenant not resolvable`, and **each retry logs `LogSeverity.Critical`
-(`SaasAcceleratorEventHandler.cs:329`)** — so a Critical-wired alert fires an email per attempt (~12 over
-the outbox backoff). This is an **expected, self-clearing** state during onboarding (the tenant provisions
-only when the customer completes AppAddin2 Setup), not an operational emergency.
+that 503s repeatedly with `tenant not resolvable`, and **each retry logged `LogSeverity.Critical`** — so a
+Critical-wired alert fired an email per attempt (~12 over the outbox backoff). Expected, self-clearing
+onboarding state (the tenant provisions only when the customer completes AppAddin2 Setup), not an emergency.
 
-`:329` logs *every* apply-error at Critical, then returns 503:
-```csharp
-Loging.Log($"SaasAcceleratorEvent {idempotencyKey}: {applyError}", Logger, LogSeverity.Critical);
-return JsonResult(HttpStatusCode.ServiceUnavailable, "error", applyError);
-```
-Don't blanket-lower it — a genuine config error (`"no connection string for MasterDb…"`) should stay loud.
-Make it **age-based**: unresolvable is normal for a while after purchase; still-unresolvable long after the
-event means genuinely stuck.
-```csharp
-// Warning during the expected onboarding window; Critical only if the event is old (stuck tenant).
-var stuck = (DateTime.UtcNow - modifiedUtc.Value) > TimeSpan.FromHours(12); // reuse a config knob if present
-Loging.Log($"SaasAcceleratorEvent {idempotencyKey}: {applyError}",
-    Logger, stuck ? LogSeverity.Critical : LogSeverity.Warning);
-```
-Zero alerts during normal onboarding, one near dead-letter if truly stuck. Also drop the **duplicate**
-Critical inside the "no provisioned tenant DB" path (~`:589`) to Warning — it double-logs with `:329`.
+**Implemented — but NOT as the proposed pure age gate, which contradicts its own intent.** A blanket
+`stuck = age > 12h ? Critical : Warning` lowers **every** error to Warning for 12h — including
+`"no connection string for MasterDb…"`, the exact config error this section says must "stay loud." So the
+fix classifies each failure and applies the age gate **only to the onboarding-transient class**:
+
+- Each failure in `ApplyPushedSubscriptionStatusAsync` now returns a `PushApplyResult` tagged
+  **transient** (tenant-not-resolvable / no-provisioned-DB / no-Subscription-row-yet — expected during
+  Setup) or **genuine** (missing connection string / home-region-unknown / malformed id / exception).
+- Severity via pure, unit-tested `PushFailureSeverity(transient, modifiedUtc, now)`:
+  transient **and** within a 12h window (`OnboardingAlertGraceHours`) → **Warning**; transient but older
+  (genuinely stuck) → **Critical**; **genuine → Critical from the first attempt, regardless of age.**
+- **Double-log fixed:** the no-provisioned-DB and no-rows paths logged Critical internally *and* at the
+  call site. All severity logging now happens once at the call site (the exception path keeps its inner
+  log — it needs the stack object). The `:589` inner Critical is gone.
+
+Net: zero alerts during normal onboarding, escalation only if a tenant is still failing 12h+ later, and a
+real config error is loud from attempt one. Build clean, 29/29 NUnit tests pass (incl. the severity-matrix
+test). RAU side, **not checked into TFVC**.
 
 ### ✅ A dead-lettered `"Activated"` is HARMLESS for a first-time / just-wiped tenant
 
