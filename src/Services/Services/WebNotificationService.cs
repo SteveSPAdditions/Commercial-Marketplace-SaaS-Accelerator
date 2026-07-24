@@ -143,36 +143,39 @@ public class WebNotificationService : IWebNotificationService
         {
             var WebNotificationUrl = this.applicationConfigRepository.GetValueByName(StringLiteralConstants.WebNotificationUrl);
 
-            //validate the URL
+            // Legacy fire-and-forget external push -- RETIRED in favour of the durable outbox signaling
+            // (LegerisSignalingDispatcher / the RAU outbox). An empty/unset WebNotificationUrl is the normal
+            // "disabled" state, so return SILENTLY: previously an empty value failed the HTTPS validation
+            // below and logged "URI is not valid ... No notification forwarded" on EVERY webhook and
+            // activation, flooding the ApplicationLog table. Set a valid HTTPS URL to opt back in.
+            if (string.IsNullOrWhiteSpace(WebNotificationUrl))
+            {
+                return;
+            }
+
+            // A NON-empty but malformed URL is a genuine misconfiguration -- still worth a single log line.
             if (!UrlValidator.IsValidUrlHttps(WebNotificationUrl))
             {
                 await this.applicationLogService.AddApplicationLog($"{StringLiteralConstants.WebNotificationUrl}: URI is not valid, does not use HTTPS scheme, or uses a port other than 443. No notification forwarded").ConfigureAwait(false);
                 return;
             }
 
-            if (!String.IsNullOrWhiteSpace(WebNotificationUrl))
+            using (var httpClient = new HttpClient())
             {
-                using (var httpClient = new HttpClient())
-                {
-                    // Create a StringContent object with the payload
-                    var content = new StringContent(payload, System.Text.Encoding.UTF8, "application/json");
+                // Create a StringContent object with the payload
+                var content = new StringContent(payload, System.Text.Encoding.UTF8, "application/json");
 
-                    // Send a POST request to the webhook URL
-                    var response = await httpClient.PostAsync(WebNotificationUrl, content);
-                    // Check the response status code
-                    if (response.IsSuccessStatusCode)
-                    {
-                        await this.applicationLogService.AddApplicationLog($"{StringLiteralConstants.WebNotificationUrl}: Web notification successfully pushed from {eventType} for {subscriptionId}").ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        await this.applicationLogService.AddApplicationLog($"{StringLiteralConstants.WebNotificationUrl}: Failed to push web notification from {eventType} for {subscriptionId}. Status code: {response.StatusCode}").ConfigureAwait(false);
-                    }
+                // Send a POST request to the webhook URL
+                var response = await httpClient.PostAsync(WebNotificationUrl, content);
+                // Check the response status code
+                if (response.IsSuccessStatusCode)
+                {
+                    await this.applicationLogService.AddApplicationLog($"{StringLiteralConstants.WebNotificationUrl}: Web notification successfully pushed from {eventType} for {subscriptionId}").ConfigureAwait(false);
                 }
-            }
-            else
-            {
-                await this.applicationLogService.AddApplicationLog($"{StringLiteralConstants.WebNotificationUrl}: No notification pushed. Webhook notification URL is empty");
+                else
+                {
+                    await this.applicationLogService.AddApplicationLog($"{StringLiteralConstants.WebNotificationUrl}: Failed to push web notification from {eventType} for {subscriptionId}. Status code: {response.StatusCode}").ConfigureAwait(false);
+                }
             }
         }
         catch (Exception)
