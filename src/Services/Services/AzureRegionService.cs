@@ -17,6 +17,7 @@ using Marketplace.SaaS.Accelerator.Services.Configurations;
 using Marketplace.SaaS.Accelerator.Services.Contracts;
 using Marketplace.SaaS.Accelerator.Services.Models;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
 
 namespace Marketplace.SaaS.Accelerator.Services.Services;
 
@@ -31,19 +32,22 @@ public class AzureRegionService : IAzureRegionService
     private readonly ISubscriptionTenantConsentRepository consentRepo;
     private readonly ISubscriptionsRepository subscriptionsRepo;
     private readonly IOutboxDispatcher dispatcher;
+    private readonly ILogger<AzureRegionService> logger;
 
     public AzureRegionService(
         HttpClient httpClient,
         SaaSApiClientConfiguration config,
         ISubscriptionTenantConsentRepository consentRepo,
         ISubscriptionsRepository subscriptionsRepo,
-        IOutboxDispatcher dispatcher)
+        IOutboxDispatcher dispatcher,
+        ILogger<AzureRegionService> logger)
     {
         this.httpClient = httpClient;
         this.config = config;
         this.consentRepo = consentRepo;
         this.subscriptionsRepo = subscriptionsRepo;
         this.dispatcher = dispatcher;
+        this.logger = logger;
     }
 
     public async Task<TenantRegionInfo> GetTenantRegionAsync(Guid tenantId, CancellationToken ct)
@@ -253,6 +257,41 @@ public class AzureRegionService : IAzureRegionService
                           TenantId = tenantId,
                       };
 
+        // Retry safety. When a region was already saved for this subscription but the fan-out never
+        // completed (i.e. this is a re-submit after a failure), FIRST ask Function1 whether the tenant is
+        // already registered somewhere before re-dispatching. A prior attempt can partially or fully
+        // succeed while still reporting failure -- e.g. the "outage" was just one region mid-zip-deploy, so
+        // the signaling endpoint 404'd/503'd for a moment even though the TenantRegions row landed. If
+        // Function1 now resolves the tenant, adopt its authoritative region and mark complete instead of
+        // re-fanning-out (region is set-once; re-fanning a different pick over an existing registration
+        // would diverge). If Function1 still can't resolve it (or the region service is itself down), fall
+        // through and (re-)dispatch as normal.
+        if (consent.AzureRegion != null && !consent.TenantRegionsFanOutCompleteUtc.HasValue)
+        {
+            var existing = await this.GetTenantRegionAsync(tenantId, ct).ConfigureAwait(false);
+            if (existing != null && !string.IsNullOrWhiteSpace(existing.AzRegion) && existing.AzRegion != "?")
+            {
+                if (!string.Equals(existing.AzRegion, azureRegion, StringComparison.OrdinalIgnoreCase))
+                {
+                    this.logger.LogWarning(
+                        "TenantRegionFanOut retry for subscription {SubscriptionId}: tenant {TenantId} is already registered in region {Existing} (Function1), which differs from the re-submitted '{Submitted}'. Adopting the registered region -- region is set-once.",
+                        ampSubscriptionId, tenantId, existing.AzRegion, azureRegion);
+                }
+
+                this.logger.LogInformation(
+                    "TenantRegionFanOut retry short-circuited for subscription {SubscriptionId}: tenant {TenantId} already registered in region {Region} -- marking complete without re-dispatch.",
+                    ampSubscriptionId, tenantId, existing.AzRegion);
+
+                consent.AzureRegion = existing.AzRegion;
+                consent.AzureRegionSelectedUtc = DateTime.UtcNow;
+                consent.AzureRegionSelectedByUpn = actorUpn;
+                consent.TenantRegionsFanOutCompleteUtc = DateTime.UtcNow;
+                consent.FanOutFailureRegions = null;
+                this.consentRepo.Save(consent);
+                return true;
+            }
+        }
+
         var now = DateTime.UtcNow;
         consent.TenantId = tenantId;
         consent.AzureRegion = azureRegion;
@@ -307,13 +346,23 @@ public class AzureRegionService : IAzureRegionService
 
         if (result.Outcome == DispatchOutcome.Delivered)
         {
+            this.logger.LogInformation(
+                "TenantRegionFanOut delivered for subscription {SubscriptionId}, region {Region}, tenant {TenantId}.",
+                ampSubscriptionId, azureRegion, tenantId);
             consent.TenantRegionsFanOutCompleteUtc = DateTime.UtcNow;
             consent.FanOutFailureRegions = null;
             this.consentRepo.Save(consent);
             return true;
         }
 
-        // Not delivered: leave the region selected (so a retry re-uses it) but not complete.
+        // Not delivered: leave the region selected (so a retry re-uses it) but not complete. This is a
+        // synchronous one-shot -- there is NO outbox retry -- so log it loudly (Warning): Setup Step 2 will
+        // sit unresolved until the operator re-Saves or the underlying cause (e.g. RAU 503, an out-of-scope
+        // region, or an unconfigured LegerisSignalingEndpointUrl) is fixed. result.Error / ResponseSnippet
+        // carry the reason -- the same value written to consent.FanOutFailureRegions for the UI.
+        this.logger.LogWarning(
+            "TenantRegionFanOut NOT delivered for subscription {SubscriptionId}, region {Region}, tenant {TenantId}: {Outcome} {Error}. Response: {Snippet}",
+            ampSubscriptionId, azureRegion, tenantId, result.Outcome, result.Error, result.ResponseSnippet);
         consent.FanOutFailureRegions = result.Error;
         this.consentRepo.Save(consent);
         return false;

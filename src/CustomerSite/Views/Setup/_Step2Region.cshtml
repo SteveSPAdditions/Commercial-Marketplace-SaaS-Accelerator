@@ -41,12 +41,26 @@
                     <text> &middot; selected @picker.SelectedUtc.Value.ToString("yyyy-MM-dd") by @picker.SelectedByUpn</text>
                 }
             </p>
-            @if (!picker.FanOutComplete)
+            @if (!picker.FanOutComplete && !string.IsNullOrEmpty(picker.ErrorMessage))
+            {
+                <p class="setup-step__hint setup-step__hint--warn">
+                    <i class="fa fa-exclamation-triangle"></i>
+                    Region propagation failed. Retry once the issue is resolved.
+                    <span class="setup-step__hint-detail">@picker.ErrorMessage</span>
+                </p>
+                @* Re-submits the SAME already-chosen region (region is set-once), which re-runs the
+                   synchronous fan-out. No re-pick: the region can't be changed once set. *@
+                <form method="post" asp-controller="Setup" asp-action="Region" asp-route-subscriptionId="@Model.AmpSubscriptionId" class="setup-region-form">
+                    <input type="hidden" name="azureRegion" value="@picker.SelectedRegion" />
+                    <button type="submit" class="cm-button-default mt20">Retry propagation</button>
+                </form>
+            }
+            else if (!picker.FanOutComplete)
             {
                 <p class="setup-step__hint setup-step__hint--inflight">
                     <i class="fa fa-circle-o-notch fa-spin"></i>
                     Propagating to all regions&hellip;
-                    <span class="setup-step__hint--slow" style="display:none">This is taking longer than expected. We'll keep retrying.</span>
+                    <span class="setup-step__hint--slow" style="display:none">This is taking longer than expected.</span>
                 </p>
             }
         }
@@ -65,7 +79,7 @@
             }
             else
             {
-                <p class="setup-step__meta">Data stored by Read and Understood data will be in this Azure region. Once set this cannot be changed.</p>
+                <p class="setup-step__meta">Data stored by Read and Understood will be in this Azure region. Once set this cannot be changed.</p>
             }
 
             @if (picker.Selectors != null && picker.Selectors.Count > 0)

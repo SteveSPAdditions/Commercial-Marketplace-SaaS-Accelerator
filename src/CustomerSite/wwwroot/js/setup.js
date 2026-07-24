@@ -28,6 +28,14 @@
                     location.reload();
                     return;
                 }
+                if (s.regionFanOutFailure) {
+                    // The fan-out is a synchronous one-shot with no retry -- a recorded failure is
+                    // terminal. Reload so the server renders the failure + reason instead of spinning
+                    // "Propagating..." forever (the re-rendered panel drops the in-flight hint, so this
+                    // poller won't restart).
+                    location.reload();
+                    return;
+                }
                 var elapsed = Date.now() - startedAt;
                 if (slowHint && elapsed > 120000) {
                     slowHint.style.display = 'block';

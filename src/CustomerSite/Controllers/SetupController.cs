@@ -264,15 +264,22 @@ public class SetupController : BaseController
 
         if (consent?.AzureRegion != null)
         {
-            vm.Step2 = consent.TenantRegionsFanOutCompleteUtc.HasValue ? StepState.Complete : StepState.InProgress;
+            var fanOutComplete = consent.TenantRegionsFanOutCompleteUtc.HasValue;
+            // The fan-out is a synchronous one-shot with NO outbox retry, so a recorded failure is
+            // terminal -- surface it as Failed with the reason instead of an endless "propagating…".
+            var fanOutFailed = !fanOutComplete && !string.IsNullOrEmpty(consent.FanOutFailureRegions);
+            vm.Step2 = fanOutComplete
+                ? StepState.Complete
+                : (fanOutFailed ? StepState.Failed : StepState.InProgress);
             vm.RegionPicker = new RegionPickerViewModel
             {
                 Mode = "saved",
                 SelectedRegion = consent.AzureRegion,
                 SelectedRegionFriendly = consent.AzureRegion,
-                FanOutComplete = consent.TenantRegionsFanOutCompleteUtc.HasValue,
+                FanOutComplete = fanOutComplete,
                 SelectedUtc = consent.AzureRegionSelectedUtc,
                 SelectedByUpn = consent.AzureRegionSelectedByUpn,
+                ErrorMessage = fanOutFailed ? consent.FanOutFailureRegions : null,
             };
         }
 
@@ -712,6 +719,11 @@ public class SetupController : BaseController
         {
             regionSelected = consent?.AzureRegion != null,
             regionFanOutComplete = consent?.TenantRegionsFanOutCompleteUtc.HasValue ?? false,
+            // Non-null only when the one-shot fan-out failed and hasn't since completed -- lets the poller
+            // stop spinning "propagating…" and show the reason.
+            regionFanOutFailure = (consent?.TenantRegionsFanOutCompleteUtc.HasValue ?? false)
+                ? null
+                : consent?.FanOutFailureRegions,
             consented = consent?.RuntimeAppConsentedUtc.HasValue ?? false,
             teamsActivityConsented = consent?.TeamsActivityAppConsentedUtc.HasValue ?? false,
             sites = sites.Select(s => new
