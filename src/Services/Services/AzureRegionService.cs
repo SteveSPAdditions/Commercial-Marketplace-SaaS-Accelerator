@@ -56,10 +56,13 @@ public class AzureRegionService : IAzureRegionService
 
         var errors = new List<string>();
 
-        // Remembers the first reachable (HTTP 200) response that couldn't identify the tenant but still
-        // returned a selector list -- see the AzRegion=="?" branch. Surfaced after the loop when no region
-        // identifies the tenant, in preference to the static fallback.
-        TenantRegionInfo unassignedWithSelectors = null;
+        // Union of the selector lists returned by every reachable region that couldn't identify the tenant
+        // (AzRegion="?"), deduped by Key (case-insensitive, first-seen order preserved). Surfaced after the
+        // loop when no region identifies the tenant, in preference to the static fallback. Union rather than
+        // first-wins so that a partial Function1 rollout -- where only some regions yet emit the E5 DEV/LH
+        // selectors -- still surfaces them if ANY region does, instead of a per-request coin-flip.
+        var unassignedSelectors = new List<RegionSelector>();
+        var unassignedSelectorKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var (region, url) in candidates)
         {
@@ -95,18 +98,18 @@ public class AzureRegionService : IAzureRegionService
                     // Reachable, but this region can't identify the tenant (e.g. a new/unassigned tenant
                     // with no TenantRegions row). Its AzureRegionSelectors are still the authoritative,
                     // tenant-aware pick list -- Function1 gates E5 -> DEV/LH server-side -- so DON'T discard
-                    // them. Remember the first such response and keep scanning: if a later region DOES
-                    // identify the tenant, that answer wins; otherwise these live selectors are surfaced
-                    // after the loop, ahead of the static fallback.
-                    if (unassignedWithSelectors == null && parsed.AzureRegionSelectors?.Count > 0)
+                    // them. Merge them into the running union (dedup by Key) and keep scanning: if a later
+                    // region DOES identify the tenant, that answer still wins; otherwise the union is
+                    // surfaced after the loop, ahead of the static fallback.
+                    if (parsed.AzureRegionSelectors != null)
                     {
-                        unassignedWithSelectors = new TenantRegionInfo
+                        foreach (var sel in parsed.AzureRegionSelectors)
                         {
-                            AzRegion = "?",
-                            AzureRegionSelectors = parsed.AzureRegionSelectors,
-                            Error = parsed.Error,
-                            IsFallback = false,
-                        };
+                            if (sel?.Key != null && unassignedSelectorKeys.Add(sel.Key))
+                            {
+                                unassignedSelectors.Add(sel);
+                            }
+                        }
                     }
 
                     errors.Add($"[{region}] AzRegion=? ({parsed.AzureRegionSelectors?.Count ?? 0} selectors)");
@@ -131,11 +134,17 @@ public class AzureRegionService : IAzureRegionService
             }
         }
 
-        // No region identified the tenant. Prefer a live, tenant-aware selector list from an unassigned
-        // (AzRegion="?") response over the static fallback -- Function1 is the authority (incl. E5 DEV/LH).
-        if (unassignedWithSelectors != null)
+        // No region identified the tenant. Prefer the live union of tenant-aware selectors from the
+        // unassigned (AzRegion="?") responses over the static fallback -- Function1 is the authority
+        // (incl. E5 DEV/LH), and the union is rollout-order-independent.
+        if (unassignedSelectors.Count > 0)
         {
-            return unassignedWithSelectors;
+            return new TenantRegionInfo
+            {
+                AzRegion = "?",
+                AzureRegionSelectors = unassignedSelectors,
+                IsFallback = false,
+            };
         }
 
         return this.FallbackResponse("All AzRegionSvc endpoints failed: " + string.Join("; ", errors));
