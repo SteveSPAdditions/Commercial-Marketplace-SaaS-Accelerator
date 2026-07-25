@@ -18,7 +18,7 @@
    you are connected to the DEV AMP database (e.g. rauAMPSaaSDB) first.
    ===================================================================== */
 
-DECLARE @Confirm varchar(20) = '';   -- <-- set to 'YES-WIPE-DEV' to execute
+DECLARE @Confirm varchar(20) = 'YES-WIPE-DEV';   -- <-- set to 'YES-WIPE-DEV' to execute
 
 IF @Confirm <> 'YES-WIPE-DEV'
 BEGIN
