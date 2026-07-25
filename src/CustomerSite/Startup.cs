@@ -312,6 +312,7 @@ public class Startup
 
         services.AddScoped<ITenantAdminConsentService, TenantAdminConsentService>();
         services.AddScoped<ISetupStatusService, SetupStatusService>();
+        services.AddScoped<ISetupCarryOverService, SetupCarryOverService>();
 
         services.AddHttpClient<IOutboxDispatcher, LegerisSignalingDispatcher>(client =>
         {

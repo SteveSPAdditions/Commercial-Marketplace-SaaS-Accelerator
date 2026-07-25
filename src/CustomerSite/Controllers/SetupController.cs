@@ -29,6 +29,7 @@ public class SetupController : BaseController
     private readonly IAzureRegionService regionService;
     private readonly ITenantAdminConsentService consentService;
     private readonly ISitePermissionService sitePermissionService;
+    private readonly ISetupCarryOverService carryOverService;
     private readonly ITokenAcquisition tokenAcquisition;
     private readonly SaaSApiClientConfiguration config;
     private readonly SaaSClientLogger<SetupController> logger;
@@ -53,6 +54,7 @@ public class SetupController : BaseController
         IAzureRegionService regionService,
         ITenantAdminConsentService consentService,
         ISitePermissionService sitePermissionService,
+        ISetupCarryOverService carryOverService,
         ITokenAcquisition tokenAcquisition,
         SaaSApiClientConfiguration config,
         SaaSClientLogger<SetupController> logger) : base(appVersionService)
@@ -63,6 +65,7 @@ public class SetupController : BaseController
         this.regionService = regionService;
         this.consentService = consentService;
         this.sitePermissionService = sitePermissionService;
+        this.carryOverService = carryOverService;
         this.tokenAcquisition = tokenAcquisition;
         this.config = config;
         this.logger = logger;
@@ -182,6 +185,13 @@ public class SetupController : BaseController
         CancellationToken ct)
     {
         var tenantId = subscription.PurchaserTenantId ?? Guid.Empty;
+
+        // Resubscribe carry-over, BEFORE anything below writes a consent row for this subscription:
+        // the service uses "no consent row yet" as its once-only guard, and the region self-heal
+        // further down creates exactly that row. Seeds the previous subscription's site list as
+        // un-granted rows; consent and grant state are deliberately not carried.
+        var carriedOverSites = this.carryOverService.CarryOverFromPreviousSubscription(subscriptionId, tenantId);
+
         var consent = this.consentRepo.GetByAmpSubscriptionId(subscriptionId);
         var sites = this.siteRepo.ListBySubscription(subscriptionId).ToList();
 
@@ -351,6 +361,15 @@ public class SetupController : BaseController
             GrantedUtc = consent?.TeamsActivityAppConsentedUtc,
             GrantedByUpn = consent?.TeamsActivityConsentedByUpn,
         };
+
+        // Only ever non-zero on the first Setup load after a resubscribe. Without this the site
+        // list simply appears pre-filled and Pending, with no hint as to why it needs re-granting.
+        if (carriedOverSites > 0)
+        {
+            vm.FlashMessage = carriedOverSites == 1
+                ? "We've brought the site from your previous subscription across. Its permissions need granting again -- click Grant access to restore it."
+                : $"We've brought the {carriedOverSites} sites from your previous subscription across. Their permissions need granting again -- click Grant access on each to restore them.";
+        }
 
         return vm;
     }
