@@ -20,6 +20,24 @@
         }
         @{
             var expandId = ViewBag.ExpandSubscriptionId as Guid?;
+
+            // Default the inline setup panel to OPEN when the customer has exactly one subscription
+            // with a panel -- the normal case here, where a SharePoint tenant has a single
+            // subscription and the list row is just a lid over the only thing worth doing on this
+            // page (enrolling sites, reviewing consent). It stays open once setup is COMPLETE too:
+            // the site list is ongoing management, not a one-time wizard -- sites get added and
+            // consent re-approved over the life of the subscription. With more than one panel we leave them all
+            // collapsed: BuildSetupViewModelAsync is a region-service network call plus a possible
+            // DB write per subscription, and is deliberately never run eagerly across a list.
+            // An explicit ?expand= (e.g. returning from an OAuth consent hop) always wins.
+            var panelSubscriptionIds = Model.Subscriptions
+                .Where(s => s.SubscriptionStatus == SubscriptionStatusEnumExtension.Subscribed
+                            && Model.SetupStatuses != null
+                            && Model.SetupStatuses.ContainsKey(s.Id))
+                .Select(s => s.Id)
+                .ToList();
+            var autoExpandId = expandId
+                ?? (panelSubscriptionIds.Count == 1 ? panelSubscriptionIds[0] : (Guid?)null);
         }
         <div class="cm-subscriptions-wrap">
             <div>
@@ -44,7 +62,7 @@
                                     {
                                         var subscription = Model.Subscriptions[i];
                                         var detailRowId = "setup-detail-" + subscription.Id;
-                                        var isRowExpanded = expandId == subscription.Id;
+                                        var isRowExpanded = autoExpandId == subscription.Id;
                                         <tr>
                                             <td class="text-left">
                                                 @Html.HiddenFor(s => s.Subscriptions[i].Id)
