@@ -59,7 +59,7 @@ public class LegerisSignalingDispatcher : IOutboxDispatcher
         {
             using var resp = await this.httpClient.SendAsync(req, ct).ConfigureAwait(false);
             var snippet = await ReadSnippetAsync(resp, ct).ConfigureAwait(false);
-            return ClassifyResponse(resp.StatusCode, snippet);
+            return ClassifyResponse(resp, snippet);
         }
         catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
         {
@@ -88,9 +88,9 @@ public class LegerisSignalingDispatcher : IOutboxDispatcher
         }
     }
 
-    private static DispatchResult ClassifyResponse(HttpStatusCode status, string snippet)
+    private static DispatchResult ClassifyResponse(HttpResponseMessage resp, string snippet)
     {
-        var code = (int)status;
+        var code = (int)resp.StatusCode;
         if (code >= 200 && code < 300)
         {
             return new DispatchResult { Outcome = DispatchOutcome.Delivered, ResponseSnippet = snippet };
@@ -100,8 +100,32 @@ public class LegerisSignalingDispatcher : IOutboxDispatcher
         {
             return new DispatchResult { Outcome = DispatchOutcome.Delivered, ResponseSnippet = snippet };
         }
+
+        // 3xx — the request never reached the receiver. Redirect-following is DISABLED on this
+        // client for exactly this reason: the receiver sits behind OWIN/OIDC auth, which converts
+        // its 401 into a 302 to login.microsoftonline.com. Followed, that chain ends at the Entra
+        // sign-in page -- HTTP 200 -- which we would have banked as Delivered and deleted the row.
+        // Treat as transient (an auth/config fault that clears when fixed) and surface the target.
+        if (code >= 300 && code < 400)
+        {
+            var location = resp.Headers.Location?.ToString();
+            return new DispatchResult
+            {
+                Outcome = DispatchOutcome.Transient,
+                Error = $"HTTP {code} redirect (endpoint is behind an auth challenge; request never reached the receiver)"
+                        + (string.IsNullOrEmpty(location) ? string.Empty : $" -> {location}"),
+                ResponseSnippet = snippet,
+            };
+        }
+
+        // 404 — retry rather than dead-letter. A 404 here is far more often "the endpoint isn't
+        // there RIGHT NOW" than "the endpoint will never exist": an ngrok tunnel whose agent has
+        // dropped answers 404 (ERR_NGROK_3200) on the still-resolvable domain, and a receiver
+        // mid-deploy does the same. Per the sender contract, a condition that can clear on its own
+        // must not be a zero-retry dead-letter. A genuinely wrong URL still dead-letters -- it just
+        // takes the full backoff ladder to get there.
         // 408 timeout, 429 throttle, 5xx — retry
-        if (code == 408 || code == 429 || (code >= 500 && code < 600))
+        if (code == 404 || code == 408 || code == 429 || (code >= 500 && code < 600))
         {
             return new DispatchResult
             {
@@ -110,6 +134,7 @@ public class LegerisSignalingDispatcher : IOutboxDispatcher
                 ResponseSnippet = snippet,
             };
         }
+
         // 4xx other than above — dead-letter
         return new DispatchResult
         {

@@ -31,6 +31,7 @@ using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.Marketplace.SaaS;
 using System;
 using System.Diagnostics;
+using System.Net.Http;
 using System.Reflection;
 
 namespace Marketplace.SaaS.Accelerator.CustomerSite;
@@ -317,7 +318,16 @@ public class Startup
         services.AddHttpClient<IOutboxDispatcher, LegerisSignalingDispatcher>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(30);
-        });
+        })
+            // Do NOT follow redirects. The signaling receiver sits behind OWIN/OIDC auth, which
+            // turns its 401 into a 302 to login.microsoftonline.com; followed, that chain ends at
+            // the Entra sign-in page (HTTP 200), which the dispatcher would classify as Delivered
+            // and delete the outbox row -- silent loss of a subscription signal. Surfacing the 302
+            // instead lets it be classified honestly.
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                AllowAutoRedirect = false,
+            });
 
         services.AddHttpClient<ISitePermissionService, SitePermissionService>(client =>
         {
