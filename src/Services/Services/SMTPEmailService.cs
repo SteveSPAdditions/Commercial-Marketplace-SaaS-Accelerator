@@ -67,17 +67,25 @@ public class SMTPEmailService : IEmailService
                     mail.IsBodyHtml = true;
                     mail.Subject = emailContent.Subject;
                     mail.Body = emailContent.Body;
-                    string[] toEmails = emailContent.ToEmails.Split(';');
-                    foreach (string multimailid in toEmails)
+                    if (!string.IsNullOrEmpty(emailContent.ToEmails))
                     {
-                        mail.To.Add(new MailAddress(multimailid));
+                        foreach (string multimailid in emailContent.ToEmails.Split(';'))
+                        {
+                            if (!string.IsNullOrWhiteSpace(multimailid))
+                            {
+                                mail.To.Add(new MailAddress(multimailid.Trim()));
+                            }
+                        }
                     }
 
                     if (!string.IsNullOrEmpty(emailContent.BCCEmails))
                     {
-                        foreach (string multimailid1 in toEmails)
+                        foreach (string multimailid in emailContent.BCCEmails.Split(';'))
                         {
-                            mail.Bcc.Add(new MailAddress(multimailid1));
+                            if (!string.IsNullOrWhiteSpace(multimailid))
+                            {
+                                mail.Bcc.Add(new MailAddress(multimailid.Trim()));
+                            }
                         }
                     }
 
