@@ -45,6 +45,13 @@ BEGIN TRAN;
     IF OBJECT_ID('dbo.WebhookOperationLog','U')        IS NOT NULL DELETE FROM dbo.WebhookOperationLog;
     IF OBJECT_ID('dbo.WebhookCapture','U')             IS NOT NULL DELETE FROM dbo.WebhookCapture;
 
+    -- Metering ledger (written by the external RauMetering pipeline; its DDL is
+    -- owned there, but the ROWS are per-subscription transactional data and must
+    -- go in a dev reset or stale billing rows survive into the next test run).
+    -- When resetting for new-offer testing, also clear the regional snapshot
+    -- tables so the writer starts from a coherent zero.
+    IF OBJECT_ID('dbo.UsageLedger','U')                IS NOT NULL DELETE FROM dbo.UsageLedger;
+
     -- The subscriptions themselves.
     IF OBJECT_ID('dbo.Subscriptions','U')              IS NOT NULL DELETE FROM dbo.Subscriptions;
 
