@@ -106,6 +106,14 @@
 
 
 
+                                <a class="minline nav-item navbar-text" asp-area="" asp-controller="MeteredUsage" asp-action="Index">
+                                <li class="minline container nav-link" style="text-decoration:none; border:0 none;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="#c2c2c2" class="bi bi-graph-up" viewBox="0 0 16 16">
+                                        <path fill-rule="evenodd" d="M0 0h1v15h15v1H0V0Zm14.817 3.113a.5.5 0 0 1 .07.704l-4.5 5.5a.5.5 0 0 1-.74.037L7.06 6.767l-3.656 5.027a.5.5 0 0 1-.808-.588l4-5.5a.5.5 0 0 1 .758-.06l2.609 2.61 4.15-5.073a.5.5 0 0 1 .704-.07Z" />
+                                    </svg> <b class="minline collapse navbar-collapse container" id="navbarCollapse">Metered usage</b>
+                                </li>
+                                </a>
+
                                 @if ((this.TempData["SupportMeteredBilling"] != null) && (this.TempData["SupportMeteredBilling"].ToString() == "1"))
                                 {
                                     <a class="minline nav-item navbar-text" asp-area="" asp-controller="Scheduler" asp-action="Index">

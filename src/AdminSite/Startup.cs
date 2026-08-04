@@ -285,6 +285,10 @@ public class Startup
         services.AddScoped<ISubscriptionTenantConsentRepository, SubscriptionTenantConsentRepository>();
         services.AddScoped<IWebhookOperationLogRepository, WebhookOperationLogRepository>();
         services.AddScoped<IWebhookCaptureRepository, WebhookCaptureRepository>();
+        // Read-only view of the UsageLedger (written by the external RauMetering
+        // pipeline; deliberately raw SQL, never part of the EF model).
+        services.AddScoped<IUsageLedgerReadRepository, UsageLedgerReadRepository>();
+        services.AddScoped<SaaSClientLogger<MeteredUsageController>>();
         services.AddScoped<SaaSClientLogger<OutboxController>>();
         services.AddScoped<SaaSClientLogger<ReconcileController>>();
         services.AddScoped<SaaSClientLogger<WebhookCaptureController>>();

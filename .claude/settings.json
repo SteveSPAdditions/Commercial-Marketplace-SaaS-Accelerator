@@ -39,7 +39,13 @@
       "PowerShell(dotnet test src/WebhookBuffer.Test --no-build)",
       "PowerShell(git push)",
       "PowerShell(dotnet test src/Services.Test --nologo 2>&1)",
-      "PowerShell(dotnet build src/AdminSite/AdminSite.csproj -v q --nologo)"
+      "PowerShell(dotnet build src/AdminSite/AdminSite.csproj -v q --nologo)",
+      "PowerShell(\\(Get-Content 'src/AdminSite/Views/Home/SubscriptionDetails.cshtml' | Measure-Object -Line\\).Lines)",
+      "PowerShell(dotnet build src/SaaSAccelerator.sln --nologo -v q 2>&1)",
+      "PowerShell(dotnet test src/Services.Test --no-build --nologo 2>&1)"
+    ],
+    "additionalDirectories": [
+      "D:\\VSTFSWork\\Legeris for SharePoint"
     ]
   },
   "enabledPlugins": {

@@ -118,6 +118,11 @@ public class HomeController : BaseController
     private readonly ISubscriptionTenantConsentRepository subscriptionTenantConsentRepository;
 
     /// <summary>
+    /// Read-only view of the UsageLedger written by the external metering pipeline.
+    /// </summary>
+    private readonly IUsageLedgerReadRepository usageLedgerReadRepository;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="HomeController" /> class.
     /// </summary>
     /// <param name="usersRepository">The users repository.</param>
@@ -165,9 +170,11 @@ public class HomeController : BaseController
         ISAGitReleasesService sAGitReleasesService,
         SaaSClientLogger<HomeController> logger,
         ISubscriptionSignalService subscriptionSignalService,
-        ISubscriptionTenantConsentRepository subscriptionTenantConsentRepository) : base(applicationConfigRepository, appVersionService)
+        ISubscriptionTenantConsentRepository subscriptionTenantConsentRepository,
+        IUsageLedgerReadRepository usageLedgerReadRepository) : base(applicationConfigRepository, appVersionService)
     {
         this.subscriptionTenantConsentRepository = subscriptionTenantConsentRepository;
+        this.usageLedgerReadRepository = usageLedgerReadRepository;
         this.billingApiService = billingApiService;
         this.subscriptionRepo = subscriptionRepo;
         this.subscriptionLogRepository = subscriptionLogsRepo;
@@ -398,6 +405,10 @@ public class HomeController : BaseController
                 oldValue.PlanId, this.saaSApiClientConfiguration.PublicPlanIds);
             subscriptionDetail.MeteredUserThreshold = this.subscriptionTenantConsentRepository
                 .GetByAmpSubscriptionId(subscriptionId)?.MeteredUserThreshold;
+
+            // Ledger rows for the metered-usage section; degrades to empty if the
+            // pipeline has not created the table yet.
+            this.ViewBag.MeteredUsage = await this.usageLedgerReadRepository.GetForSubscriptionAsync(subscriptionId);
 
             if (this.TempData["ErrorMsg"] != null)
             {

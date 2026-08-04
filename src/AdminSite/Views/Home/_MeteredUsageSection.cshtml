@@ -1,0 +1,81 @@
+@using Marketplace.SaaS.Accelerator.DataAccess.Entities
+@model List<UsageLedgerRow>
+@{
+    var utcNow = DateTime.UtcNow;
+}
+
+<div class="text-left mt40">
+    <span class="cm-section-heading">Metered usage</span>
+</div>
+@if (Model == null || Model.Count == 0)
+{
+    <p class="text-muted mt20">No metered usage recorded yet.</p>
+}
+else
+{
+    <div class="cm-panel-default mt20" style="overflow-x:auto">
+        <table class="table table-striped table-bordered" width="100%" cellspacing="0">
+            <thead>
+                <tr>
+                    <th>Period</th>
+                    <th>Units</th>
+                    <th>Active users</th>
+                    <th>Threshold</th>
+                    <th>Status</th>
+                    <th>Event id</th>
+                    <th>Accepted</th>
+                    <th>Attempts</th>
+                    <th>Reason</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model)
+                {
+                    var badge = MeteredUsageBadge(row, utcNow);
+                    <tr>
+                        <td>@row.PeriodStartUtc.ToString("yyyy-MM-dd") &ndash; @row.PeriodEndUtc.ToString("yyyy-MM-dd")</td>
+                        <td>@row.Units</td>
+                        <td>@(row.ActiveUserCount?.ToString() ?? "-")</td>
+                        <td>@(row.ThresholdApplied?.ToString() ?? "-")</td>
+                        <td><span class="badge @badge.Css">@badge.Label</span></td>
+                        <td>@row.MsftUsageEventId</td>
+                        <td>@(row.AcceptedUtc?.ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
+                        <td>@row.Attempts</td>
+                        <td>
+                            @row.SkipReason
+                            @if (!string.IsNullOrEmpty(row.LastResponse))
+                            {
+                                <details>
+                                    <summary>response</summary>
+                                    <pre style="white-space: pre-wrap; margin-bottom: 0;">@row.LastResponse</pre>
+                                </details>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@functions {
+    /// <summary>Status badge mapping shared by convention with MeteredUsage/Index; near-cliff pending goes red.</summary>
+    public static (string Css, string Label) MeteredUsageBadge(UsageLedgerRow row, DateTime utcNow)
+    {
+        if (row.IsNearCliff(utcNow))
+        {
+            return ("bg-danger", "pending (near cliff)");
+        }
+
+        return (row.Status?.ToLowerInvariant()) switch
+        {
+            "accepted" => ("bg-success", row.Status),
+            "pending" => ("bg-warning text-dark", row.Status),
+            "expired" => ("bg-danger", row.Status),
+            "skipped" => ("bg-secondary", row.Status),
+            "duplicate" => ("bg-info text-dark", row.Status),
+            "zero" => ("bg-light text-dark border", row.Status),
+            _ => ("bg-secondary", row.Status ?? "unknown"),
+        };
+    }
+}
