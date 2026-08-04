@@ -480,8 +480,9 @@ if (!(Test-Path '../Publish')) {
 	Write-host "   🔵 Preparing Admin Site"  
 	dotnet publish ../src/AdminSite/AdminSite.csproj -c release -o ../Publish/AdminSite/ -v q
 
-	Write-host "   🔵 Preparing Metered Scheduler"
-	dotnet publish ../src/MeteredTriggerJob/MeteredTriggerJob.csproj -c release -o ../Publish/AdminSite/app_data/jobs/triggered/MeteredTriggerJob/ -v q --runtime win-x64 --self-contained true 
+	# MeteredTriggerJob (the metered-billing WebJob) is RETIRED -- metering is
+	# emitted by the RauMetering function apps via the UsageLedger. Deliberately
+	# not published so the IsMeteredBillingEnabled flag cannot resurrect it.
 
 	Write-host "   🔵 Preparing Customer Site"
 	dotnet publish ../src/CustomerSite/CustomerSite.csproj -c release -o ../Publish/CustomerSite/ -v q

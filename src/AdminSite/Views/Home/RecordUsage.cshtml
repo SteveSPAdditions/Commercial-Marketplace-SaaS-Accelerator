@@ -20,6 +20,15 @@
                         <div class="text-left">
                             <span class="cm-section-heading">Manage Subscription Usage</span>
                         </div>
+                        <div class="alert alert-warning mt-2" role="alert">
+                            <strong>Emergency use only.</strong> Usage recorded here goes straight to the
+                            Marketplace Metering API and <strong>bypasses the UsageLedger</strong> &mdash; it is
+                            invisible to the RauMetering pipeline's double-billing guard and to any usage
+                            reporting built on the ledger. Microsoft only deduplicates within the same clock
+                            hour, so emitting a dimension/period the automated pipeline also bills will
+                            <strong>charge the customer twice</strong>. Never emit here for a
+                            dimension and billing period the pipeline covers.
+                        </div>
                         <form asp-action="ManageSubscriptionUsage" method="post">
                             <div class="row p10">
                                 <div class="col-md-auto pt-1">

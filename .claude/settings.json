@@ -36,7 +36,10 @@
       "PowerShell(dotnet build src/SaaSAccelerator.sln)",
       "PowerShell(dotnet test src/SaaSAccelerator.sln --no-build --verbosity normal 2>&1)",
       "PowerShell(dotnet test src/Services.Test --no-build)",
-      "PowerShell(dotnet test src/WebhookBuffer.Test --no-build)"
+      "PowerShell(dotnet test src/WebhookBuffer.Test --no-build)",
+      "PowerShell(git push)",
+      "PowerShell(dotnet test src/Services.Test --nologo 2>&1)",
+      "PowerShell(dotnet build src/AdminSite/AdminSite.csproj -v q --nologo)"
     ]
   },
   "enabledPlugins": {

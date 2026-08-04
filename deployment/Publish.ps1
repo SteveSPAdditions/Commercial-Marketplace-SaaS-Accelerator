@@ -47,8 +47,11 @@ if (-not $CustomerOnly) {
     Write-Host "   ->> Preparing Admin Site"
     dotnet publish ../src/AdminSite/AdminSite.csproj -c release -o ../Publish/AdminSite/ -v q
 
-    Write-Host "   ->> Preparing Metered Scheduler"
-    dotnet publish ../src/MeteredTriggerJob/MeteredTriggerJob.csproj -c release -o ../Publish/AdminSite/app_data/jobs/triggered/MeteredTriggerJob/ -v q --runtime win-x64 --self-contained true
+    # MeteredTriggerJob (the metered-billing WebJob) is RETIRED -- metering is now
+    # emitted by the RauMetering function apps via the UsageLedger. Deliberately no
+    # longer published so the IsMeteredBillingEnabled flag cannot resurrect it.
+    # If the folder still exists on the web app, delete it via Kudu:
+    #   site/wwwroot/app_data/jobs/triggered/MeteredTriggerJob
 
     Write-Host "   ->> Zipping Admin Site"
     Compress-Archive -Path ../Publish/AdminSite/* -DestinationPath ../Publish/AdminSite.zip -Force

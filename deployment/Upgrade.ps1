@@ -274,8 +274,9 @@ Write-host "#### STEP 2 Deploying new code ####"
 Write-host "## STEP 2.1 Building Admin Portal"
 dotnet publish ../src/AdminSite/AdminSite.csproj -v q -c release -o ../Publish/AdminSite/
 
-Write-host "## STEP 2.2 Building Meter Scheduler"
-dotnet publish ../src/MeteredTriggerJob/MeteredTriggerJob.csproj -c release -o ../Publish/AdminSite/app_data/jobs/triggered/MeteredTriggerJob/ --runtime win-x64 --self-contained true -p:PublishReadyToRun=false
+# STEP 2.2 removed: MeteredTriggerJob (the metered-billing WebJob) is RETIRED --
+# metering is emitted by the RauMetering function apps via the UsageLedger.
+# Deliberately not published so the IsMeteredBillingEnabled flag cannot resurrect it.
 
 Write-host "## STEP 2.3 Building Customer Portal"
 dotnet publish ../src/CustomerSite/CustomerSite.csproj -v q -c release -o ../Publish/CustomerSite
