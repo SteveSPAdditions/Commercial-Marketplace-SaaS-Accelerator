@@ -196,6 +196,14 @@ public class WebHookHandler : IWebhookHandler
         await this.applicationLogService.AddApplicationLog("Plan Successfully Changed.").ConfigureAwait(false);
         auditLog.NewValue = payload.PlanId;
         this.subscriptionsLogRepository.Save(auditLog);
+
+        // A plan change can move the term as well (e.g. monthly -> annual), and the webhook payload
+        // carries no term data -- refresh from a live pull BEFORE signaling so the PlanChanged
+        // signal carries the current MarketplaceTermStartUtc for the regional tenantregions rows.
+        // Best-effort: the plan update above has committed and must not be retried for a term hiccup.
+        await new SubscriptionTermRefreshService(this.fulfillApiService, this.subscriptionsRepository, this.logger)
+            .RefreshTermAsync(payload.SubscriptionId).ConfigureAwait(false);
+
         this.subscriptionSignalService.EnqueueSubscriptionSignal(payload.SubscriptionId, "PlanChanged", payload.OperationId);
         await Task.CompletedTask;
     }
@@ -310,13 +318,27 @@ public class WebHookHandler : IWebhookHandler
     }
 
     /// <summary>
-    /// Renewed the subscription.
+    /// Renewed the subscription. On renewal Microsoft starts a NEW term -- on an annual plan the
+    /// term start moves forward a year -- and the webhook payload carries no term data, so the
+    /// local Term/StartDate/EndDate must be refreshed from a live Fulfillment pull. The signal
+    /// then carries the new MarketplaceTermStartUtc to the regional tenantregions rows, which the
+    /// metered-billing boundary scheduling derives emission windows from: a missed refresh here
+    /// silently moves the emission window.
     /// </summary>
     /// <param name="payload">The payload.</param>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    public async Task RenewedAsync()
+    public async Task RenewedAsync(WebhookPayload payload)
     {
+        await new SubscriptionTermRefreshService(this.fulfillApiService, this.subscriptionsRepository, this.logger)
+            .RefreshTermAsync(payload.SubscriptionId).ConfigureAwait(false);
+
         await this.applicationLogService.AddApplicationLog("Offer Successfully Renewed.").ConfigureAwait(false);
+
+        // "Renewed" is not yet a handled type on the Legeris side; the receiver answers 202
+        // (unhandled, deliberately not persisted to its dedup log) which the dispatcher treats as
+        // Delivered -- so this is additive and safe today, and starts flowing the moment the
+        // receiver implements it.
+        this.subscriptionSignalService.EnqueueSubscriptionSignal(payload.SubscriptionId, "Renewed", payload.OperationId);
 
         await Task.CompletedTask;
     }

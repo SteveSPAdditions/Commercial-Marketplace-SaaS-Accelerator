@@ -114,6 +114,8 @@ public class Startup
             OutboxMaxAttempts = int.TryParse(this.Configuration["SaaSApiConfiguration:OutboxMaxAttempts"], out var oma) ? oma : 12,
             OutboxDrainIntervalSeconds = int.TryParse(this.Configuration["SaaSApiConfiguration:OutboxDrainIntervalSeconds"], out var odi) ? odi : 30,
             RedirectActivateToSetup = bool.TryParse(this.Configuration["SaaSApiConfiguration:RedirectActivateToSetup"], out var ras) && ras,
+            PublicPlanIds = this.Configuration["SaaSApiConfiguration:PublicPlanIds"]
+                            ?? SaaSApiClientConfiguration.PublicPlanIdsDefault,
         };
         var creds = new ClientSecretCredential(config.TenantId.ToString(), config.ClientId.ToString(), config.ClientSecret);
 

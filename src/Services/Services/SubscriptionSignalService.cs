@@ -40,6 +40,7 @@ public class SubscriptionSignalService : ISubscriptionSignalService
             using var scope = this.scopeFactory.CreateScope();
             var subscriptionsRepo = scope.ServiceProvider.GetRequiredService<ISubscriptionsRepository>();
             var outboxRepo = scope.ServiceProvider.GetRequiredService<INotificationOutboxRepository>();
+            var consentRepo = scope.ServiceProvider.GetRequiredService<ISubscriptionTenantConsentRepository>();
             var context = scope.ServiceProvider.GetRequiredService<SaasKitContext>();
 
             // Read the CURRENT (post-update) state: this runs after the handler committed the change,
@@ -67,6 +68,15 @@ public class SubscriptionSignalService : ISubscriptionSignalService
                 return;
             }
 
+            // Metered-billing trio for the regional tenantregions rows: the subscription id (already
+            // carried as saasSubscriptionId), the metered user threshold N (master copy on the
+            // consent row, captured at manual private-plan activation), and the term start (moves on
+            // activation / ChangePlan / Renew -- the handlers refresh Subscriptions.StartDate from a
+            // live pull before signaling). Carried on EVERY signal so the three values are refreshed
+            // by the same events and go stale together or not at all. Null when uncaptured; the
+            // receiver treats null as "leave unchanged".
+            var consent = consentRepo.GetByAmpSubscriptionId(ampSubscriptionId);
+
             var now = DateTime.UtcNow;
             var payload = new
             {
@@ -77,6 +87,8 @@ public class SubscriptionSignalService : ISubscriptionSignalService
                 subscriptionStatus = SubscriptionStatusNormalizer.ToMarketplaceStatus(subscription.SubscriptionStatus),
                 modifiedUtc = now,
                 occurredBy = "Accelerator",
+                meteredUserThreshold = consent?.MeteredUserThreshold,
+                marketplaceTermStartUtc = subscription.StartDate,
             };
 
             var entry = new NotificationOutbox

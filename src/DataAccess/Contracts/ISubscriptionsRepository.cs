@@ -52,6 +52,16 @@ public interface ISubscriptionsRepository : IDisposable, IBaseRepository<Subscri
     void UpdateQuantityForSubscription(Guid subscriptionId, int quantity);
 
     /// <summary>
+    /// Updates the term (unit + start/end dates) for subscription. Term moves on activation,
+    /// plan change and renewal; only these three columns are touched.
+    /// </summary>
+    /// <param name="subscriptionId">The subscription identifier.</param>
+    /// <param name="term">The term unit (e.g. P1M / P1Y).</param>
+    /// <param name="startDate">The term start (UTC).</param>
+    /// <param name="endDate">The term end (UTC).</param>
+    void UpdateTermForSubscription(Guid subscriptionId, string term, DateTime? startDate, DateTime? endDate);
+
+    /// <summary>
     /// Gets the subscriptions parameters by identifier.
     /// </summary>
     /// <param name="subscriptionId">The subscription identifier.</param>

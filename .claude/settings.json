@@ -23,7 +23,20 @@
       "Bash(dotnet tool *)",
       "Bash(dotnet ef *)",
       "Bash(git rev-list *)",
-      "PowerShell(try { $r = Invoke-WebRequest -Uri \"https://rau-admin.azurewebsites.net/\" -MaximumRedirection 0 -ErrorAction Stop -TimeoutSec 25; \"STATUS: $\\($r.StatusCode\\)\" } catch { \"ERR/STATUS: $\\($_.Exception.Response.StatusCode.value__\\) $\\($_.Exception.Message\\)\" })"
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"https://rau-admin.azurewebsites.net/\" -MaximumRedirection 0 -ErrorAction Stop -TimeoutSec 25; \"STATUS: $\\($r.StatusCode\\)\" } catch { \"ERR/STATUS: $\\($_.Exception.Response.StatusCode.value__\\) $\\($_.Exception.Message\\)\" })",
+      "PowerShell(dotnet build src/CustomerSite/CustomerSite.csproj -v q --nologo)",
+      "PowerShell(dotnet test src/Services.Test/Services.Test.csproj --nologo -v q 2>&1)",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri 'https://optimal-fair-lobster.ngrok-free.app/api/saasaccelerator/event' -Method GET -MaximumRedirection 0 -ErrorAction Stop; $r.StatusCode; $r.Headers | Format-List } catch { $resp = $_.Exception.Response; \"STATUS: \" + [int]$resp.StatusCode; \"HEADERS:\"; foreach \\($h in $resp.Headers\\) { \"$h = \" + \\($resp.Headers[$h] -join ','\\) } })",
+      "Bash(grep -oE \"N'[^']{0,80}',N'1'\\\\\\)|,N'[A-Za-z ][^']{0,60}',N?[01]\\\\\\)\" src/DataAccess/Migrations/Custom/BaselineV7_Seed.cs)",
+      "Bash(grep -oE \"','\\(Pending Activation|Subscribed|Unsubscribed|Failed|[A-Z][A-Za-z ]{2,50}\\)',1\\\\\\)\" deployment/script.bak.sql)",
+      "Bash(grep -oE \"N'[A-Z][^']{3,60}',N?'?[01]'?\\\\\\)\" src/DataAccess/Migrations/Custom/BaselineV7_Seed.cs)",
+      "Bash(awk 'NR>=42 && NR<=56' src/DataAccess/Migrations/Custom/BaselineV7_Seed.cs)",
+      "Bash(grep -oE \".{140}$\")",
+      "PowerShell(& \"${env:ProgramFiles\\(x86\\)}\\\\Microsoft Visual Studio\\\\Installer\\\\vswhere.exe\" -all -prerelease -format json | ConvertFrom-Json | Select-Object displayName, installationVersion, installationPath, productPath | Format-List)",
+      "PowerShell(dotnet build src/SaaSAccelerator.sln)",
+      "PowerShell(dotnet test src/SaaSAccelerator.sln --no-build --verbosity normal 2>&1)",
+      "PowerShell(dotnet test src/Services.Test --no-build)",
+      "PowerShell(dotnet test src/WebhookBuffer.Test --no-build)"
     ]
   },
   "enabledPlugins": {

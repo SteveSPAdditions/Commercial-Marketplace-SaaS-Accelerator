@@ -107,6 +107,9 @@ public class Startup
             WebhookBufferHmacSecret = this.Configuration["SaaSApiConfiguration:WebhookBufferHmacSecret"],
             // Portal origin the webhook-capture Replay POSTs back to (buffer-HMAC-signed).
             CustomerSiteBaseUrl = this.Configuration["SaaSApiConfiguration:CustomerSiteBaseUrl"],
+            // Public-plan allowlist for the metered user threshold (N) activation gate.
+            PublicPlanIds = this.Configuration["SaaSApiConfiguration:PublicPlanIds"]
+                            ?? SaaSApiClientConfiguration.PublicPlanIdsDefault,
         };
         var knownUsers = new KnownUsersModel()
         {
@@ -277,6 +280,9 @@ public class Startup
         services.AddScoped<SaaSClientLogger<SchedulerController>>();
         services.AddScoped<INotificationOutboxRepository, NotificationOutboxRepository>();
         services.AddScoped<ISubscriptionSignalService, SubscriptionSignalService>();
+        // Metered user threshold (N) capture at manual activation, and the signal service's
+        // threshold read, both need the consent row.
+        services.AddScoped<ISubscriptionTenantConsentRepository, SubscriptionTenantConsentRepository>();
         services.AddScoped<IWebhookOperationLogRepository, WebhookOperationLogRepository>();
         services.AddScoped<IWebhookCaptureRepository, WebhookCaptureRepository>();
         services.AddScoped<SaaSClientLogger<OutboxController>>();

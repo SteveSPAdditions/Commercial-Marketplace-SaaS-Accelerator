@@ -14,11 +14,10 @@
             @if (Model != null && !string.IsNullOrEmpty(Model.ErrorMessage))
             {
                 <div class="alert alert-danger partner-card-body">
-                    <strong>Error!</strong> Some Error Occurred During Operation!
+                    <strong>Error!</strong> @Model.ErrorMessage
                 </div>
             }
-            else
-            {
+            @{
                 <div class="cm-panel-default mt20">
                     <dl class="row text-left">
                         <dt class="col-sm-3 p-2 p10">
@@ -122,6 +121,25 @@
                             @Html.DisplayFor(model => model.Beneficiary.ObjectId)
                             @Html.HiddenFor(model => model.Beneficiary.ObjectId)
                         </dd>
+                        @if (Model.IsMeteredThresholdRequired)
+                        {
+                            <dt class="col-sm-3 p-2 p10">
+                                @Html.DisplayName("Metered User Threshold (N) ")
+                            </dt>
+                            <dd class="col-sm-9 p-2 p10">
+                                @if (Model.SubscriptionStatus == SubscriptionStatusEnumExtension.PendingFulfillmentStart || Model.SubscriptionStatus == SubscriptionStatusEnumExtension.PendingActivation || Model.SubscriptionStatus == SubscriptionStatusEnumExtension.ActivationFailed)
+                                {
+                                    @* No "required" attribute: the Go-to-list button submits this same form and must not
+                                       be blocked. The server-side gate in SubscriptionOperation is authoritative. *@
+                                    <input type="number" name="meteredUserThreshold" min="0" step="1" value="@Model.MeteredUserThreshold" class="form-control" style="max-width: 200px; display: inline-block;" />
+                                    <small class="form-text text-muted">Required for this private-offer plan: the agreed per-month exempt user count. Metered billing emits max(0, active users &minus; N). Do not leave blank &mdash; activation is blocked without it.</small>
+                                }
+                                else
+                                {
+                                    @(Model.MeteredUserThreshold?.ToString() ?? "not captured")
+                                }
+                            </dd>
+                        }
                     </dl>
                 </div>
                 <div style="text-align: right !important;">

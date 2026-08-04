@@ -113,6 +113,11 @@ public class HomeController : BaseController
     private SaaSApiClientConfiguration saaSApiClientConfiguration;
 
     /// <summary>
+    /// The subscription tenant-consent repository (metered user threshold master copy).
+    /// </summary>
+    private readonly ISubscriptionTenantConsentRepository subscriptionTenantConsentRepository;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="HomeController" /> class.
     /// </summary>
     /// <param name="usersRepository">The users repository.</param>
@@ -159,8 +164,10 @@ public class HomeController : BaseController
         IAppVersionService appVersionService,
         ISAGitReleasesService sAGitReleasesService,
         SaaSClientLogger<HomeController> logger,
-        ISubscriptionSignalService subscriptionSignalService) : base(applicationConfigRepository, appVersionService)
+        ISubscriptionSignalService subscriptionSignalService,
+        ISubscriptionTenantConsentRepository subscriptionTenantConsentRepository) : base(applicationConfigRepository, appVersionService)
     {
+        this.subscriptionTenantConsentRepository = subscriptionTenantConsentRepository;
         this.billingApiService = billingApiService;
         this.subscriptionRepo = subscriptionRepo;
         this.subscriptionLogRepository = subscriptionLogsRepo;
@@ -384,6 +391,18 @@ public class HomeController : BaseController
             subscriptionDetail.SubscriptionParameters = this.subscriptionService.GetSubscriptionsParametersById(subscriptionId, plandetails.PlanGuid);
             var detailsFromAPI = await this.fulfillApiService.GetSubscriptionByIdAsync(subscriptionId).ConfigureAwait(false);
             subscriptionDetail.Beneficiary = detailsFromAPI.Beneficiary;
+
+            // Metered user threshold (N): mandatory for private-offer plans (any plan id not on
+            // the configured public allowlist) and captured on this page at activation time.
+            subscriptionDetail.IsMeteredThresholdRequired = MeteredPlanGuard.RequiresThreshold(
+                oldValue.PlanId, this.saaSApiClientConfiguration.PublicPlanIds);
+            subscriptionDetail.MeteredUserThreshold = this.subscriptionTenantConsentRepository
+                .GetByAmpSubscriptionId(subscriptionId)?.MeteredUserThreshold;
+
+            if (this.TempData["ErrorMsg"] != null)
+            {
+                subscriptionDetail.ErrorMessage = Convert.ToString(this.TempData["ErrorMsg"]);
+            }
         }
 
         return this.View(subscriptionDetail);
@@ -438,9 +457,9 @@ public class HomeController : BaseController
     /// <param name="numberofProviders">The numberof providers.</param>
     /// <returns> The <see cref="IActionResult" />.</returns>
     [HttpPost]
-    public IActionResult SubscriptionOperation(Guid subscriptionId, string planId, string operation, int numberofProviders)
+    public IActionResult SubscriptionOperation(Guid subscriptionId, string planId, string operation, int numberofProviders, int? meteredUserThreshold = null)
     {
-        this.logger.Info(HttpUtility.HtmlEncode($"Home Controller / SubscriptionOperation subscriptionId:{subscriptionId} :: planId : {planId} :: operation:{operation} :: NumberofProviders : {numberofProviders}"));
+        this.logger.Info(HttpUtility.HtmlEncode($"Home Controller / SubscriptionOperation subscriptionId:{subscriptionId} :: planId : {planId} :: operation:{operation} :: NumberofProviders : {numberofProviders} :: MeteredUserThreshold : {meteredUserThreshold}"));
         try
         {
             var userDetails = this.userRepository.GetPartnerDetailFromEmail(this.CurrentUserEmailAddress);
@@ -448,6 +467,34 @@ public class HomeController : BaseController
             SubscriptionProcessQueueModel queueObject = new SubscriptionProcessQueueModel();
             if (operation == "Activate")
             {
+                // Metered user threshold (N) gate. Plan id is taken from the DB row, never the
+                // client-supplied route value. A private-offer plan (not on the public allowlist)
+                // must NOT activate without N: emission computes max(0, activeUsers - N), and a
+                // missing threshold on an Enterprise customer over-bills by orders of magnitude.
+                // Deliberately no default to 0.
+                if (MeteredPlanGuard.BlocksActivation(oldValue.PlanId, this.saaSApiClientConfiguration.PublicPlanIds, meteredUserThreshold))
+                {
+                    this.logger.Info(HttpUtility.HtmlEncode($"Activation blocked for {subscriptionId}: plan '{oldValue.PlanId}' is a private-offer plan and no metered user threshold was supplied."));
+                    this.TempData["ErrorMsg"] = $"Plan '{oldValue.PlanId}' is a private-offer plan: enter the agreed metered user threshold (N) before activating. The subscription has NOT been activated.";
+                    return this.RedirectToAction(nameof(this.SubscriptionDetails), new { subscriptionId, planId = oldValue.PlanId });
+                }
+
+                // Persist N BEFORE activation proceeds, so a failure after this point never loses
+                // the captured value. Public plans carry no threshold by design (the field is not
+                // shown for them); their consent row keeps a NULL threshold.
+                if (MeteredPlanGuard.RequiresThreshold(oldValue.PlanId, this.saaSApiClientConfiguration.PublicPlanIds))
+                {
+                    var consent = this.subscriptionTenantConsentRepository.GetByAmpSubscriptionId(subscriptionId)
+                                  ?? new SubscriptionTenantConsent
+                                  {
+                                      AmpSubscriptionId = subscriptionId,
+                                      TenantId = oldValue.Purchaser?.TenantId ?? Guid.Empty,
+                                  };
+                    consent.MeteredUserThreshold = meteredUserThreshold;
+                    this.subscriptionTenantConsentRepository.Save(consent);
+                    this.applicationLogService.AddApplicationLog($"Metered user threshold {meteredUserThreshold} captured for subscription {subscriptionId} (plan '{oldValue.PlanId}') at activation.").ConfigureAwait(false).GetAwaiter().GetResult();
+                }
+
                 if (oldValue.SubscriptionStatus.ToString() != SubscriptionStatusEnumExtension.PendingActivation.ToString())
                 {
                     this.subscriptionRepository.UpdateStatusForSubscription(subscriptionId, SubscriptionStatusEnumExtension.PendingActivation.ToString(), true);

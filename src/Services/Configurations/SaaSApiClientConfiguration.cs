@@ -178,4 +178,20 @@ public class SaaSApiClientConfiguration
 
     /// <summary>Redirect activations to the new Setup page instead of ProcessMessage.</summary>
     public bool RedirectActivateToSetup { get; set; } = false;
+
+    /// <summary>
+    /// Default for <see cref="PublicPlanIds"/>: the current offer's public plan ids. These WILL
+    /// change at the pending offer rebuild (metered dimension rename); override via configuration
+    /// rather than editing this constant. A plan id NOT in this list is treated as a private-offer
+    /// plan and requires a metered user threshold (N) at activation -- so an out-of-date list
+    /// fails safe (blocks activation) rather than billing a private customer with no threshold.
+    /// </summary>
+    public const string PublicPlanIdsDefault = "free-trial,monthly,standard-monthly,annual";
+
+    /// <summary>
+    /// Comma-separated allowlist of PUBLIC marketplace plan ids (exact match against Partner
+    /// Center, case-sensitive). Public plans carry no metered user threshold (N = 0 by design);
+    /// any other plan id is a private-offer plan and N is mandatory at activation.
+    /// </summary>
+    public string PublicPlanIds { get; set; } = PublicPlanIdsDefault;
 }

@@ -103,6 +103,30 @@ public class SubscriptionsRepository : ISubscriptionsRepository
     }
 
     /// <summary>
+    /// Updates the term (unit + start/end dates) for subscription. Deliberately touches ONLY the
+    /// term columns: callers refresh these from a live Fulfillment pull mid-webhook, when plan and
+    /// status may be mid-transition and must not be overwritten from the API snapshot.
+    /// </summary>
+    /// <param name="subscriptionId">The subscription identifier.</param>
+    /// <param name="term">The term unit (e.g. P1M / P1Y).</param>
+    /// <param name="startDate">The term start (UTC).</param>
+    /// <param name="endDate">The term end (UTC).</param>
+    public void UpdateTermForSubscription(Guid subscriptionId, string term, DateTime? startDate, DateTime? endDate)
+    {
+        var existingSubscription = this.context.Subscriptions.Where(s => s.AmpsubscriptionId == subscriptionId).FirstOrDefault();
+        if (existingSubscription != null)
+        {
+            existingSubscription.Term = term;
+            existingSubscription.StartDate = startDate;
+            existingSubscription.EndDate = endDate;
+            existingSubscription.ModifyDate = DateTime.Now;
+            this.context.Subscriptions.Update(existingSubscription);
+        }
+
+        this.context.SaveChanges();
+    }
+
+    /// <summary>
     /// Updates the Quantity for subscription.
     /// </summary>
     /// <param name="subscriptionId">The subscription identifier.</param>

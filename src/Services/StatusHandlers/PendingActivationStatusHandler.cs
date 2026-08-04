@@ -7,6 +7,7 @@ using Marketplace.SaaS.Accelerator.DataAccess.Contracts;
 using Marketplace.SaaS.Accelerator.DataAccess.Entities;
 using Marketplace.SaaS.Accelerator.Services.Contracts;
 using Marketplace.SaaS.Accelerator.Services.Models;
+using Marketplace.SaaS.Accelerator.Services.Services;
 using Microsoft.Extensions.Logging;
 
 namespace Marketplace.SaaS.Accelerator.Services.StatusHandlers;
@@ -101,6 +102,14 @@ public class PendingActivationStatusHandler : AbstractSubscriptionStatusHandler
                 this.subscriptionLogRepository.Save(auditLog);
 
                 this.subscriptionLogRepository.LogStatusDuringProvisioning(subscriptionID, "Activated", SubscriptionStatusEnumExtension.Subscribed.ToString());
+
+                // The term starts at activation: refresh Term/StartDate/EndDate from a live pull so
+                // the "Activated" signal below carries the real MarketplaceTermStartUtc for the
+                // regional tenantregions rows. Best-effort (the service never throws) -- activation
+                // has already succeeded at Microsoft, and a term-pull hiccup must not surface as
+                // ActivationFailed.
+                new SubscriptionTermRefreshService(this.fulfillmentApiService, this.subscriptionsRepository, this.logger)
+                    .RefreshTermAsync(subscriptionID).ConfigureAwait(false).GetAwaiter().GetResult();
 
                 // Signal RAU that the subscription is now active. This is what flips RAU's cached
                 // MarketplaceSubscriptionStatus back to Subscribed on a resubscribe (the only path that

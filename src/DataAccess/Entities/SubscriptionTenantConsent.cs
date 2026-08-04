@@ -36,6 +36,12 @@ public partial class SubscriptionTenantConsent
 
     public string TeamsActivityConsentedByObjectId { get; set; }
 
+    // Metered-billing user threshold (N) for private-offer plans, captured at manual
+    // activation in the admin portal. NULL for public plans (threshold 0 by design) and
+    // for rows that pre-date capture. This is the MASTER copy; the operational copy in
+    // the regional TenantRegions rows is refreshed from lifecycle events.
+    public int? MeteredUserThreshold { get; set; }
+
     public DateTime? CreatedUtc { get; set; }
 
     public DateTime? ModifiedUtc { get; set; }

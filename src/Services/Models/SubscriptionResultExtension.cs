@@ -73,4 +73,17 @@ public class SubscriptionResultExtension : SubscriptionResult
     /// Gets or sets a value indicating if we allow subscription updates on the customer side.
     /// </summary>
     public bool AcceptSubscriptionUpdates { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether this subscription's plan is a private-offer plan
+    /// (not on the configured public-plan allowlist) and therefore requires the metered user
+    /// threshold (N) to be captured before manual activation.
+    /// </summary>
+    public bool IsMeteredThresholdRequired { get; set; }
+
+    /// <summary>
+    /// Gets or sets the metered user threshold (N) currently stored for this subscription
+    /// (SubscriptionTenantConsent), if any. Null for public plans and uncaptured rows.
+    /// </summary>
+    public int? MeteredUserThreshold { get; set; }
 }

@@ -306,8 +306,16 @@ public class HomeController : BaseController
                         // needs fulfillment and the offer supports automatic provisioning, activate it
                         // on entry (no manual Activate click) and route the customer straight to Setup.
                         // Already-active subscriptions fall through to the subscriptions-list redirect below.
+                        //
+                        // PUBLIC plans only: a private-offer plan (not on the PublicPlanIds allowlist)
+                        // must go through manual activation in the admin portal, where the metered user
+                        // threshold (N) is captured and activation is blocked without it. Auto-activating
+                        // a private plan would bypass that gate and bill the full headcount with no
+                        // threshold, so private plans deliberately fall through and stay
+                        // PendingFulfillmentStart until the publisher activates them.
                         if (subscriptionExtension.SubscriptionStatus == SubscriptionStatusEnumExtension.PendingFulfillmentStart
-                            && subscriptionExtension.IsAutomaticProvisioningSupported)
+                            && subscriptionExtension.IsAutomaticProvisioningSupported
+                            && MeteredPlanGuard.IsPublicPlan(subscriptionExtension.PlanId, this.saaSApiClientConfiguration?.PublicPlanIds))
                         {
                             return await this.AutoActivateSubscriptionAsync(
                                 newSubscription.SubscriptionId,
