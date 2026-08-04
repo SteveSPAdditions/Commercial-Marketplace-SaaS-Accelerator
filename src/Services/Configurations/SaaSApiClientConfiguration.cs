@@ -186,7 +186,7 @@ public class SaaSApiClientConfiguration
     /// plan and requires a metered user threshold (N) at activation -- so an out-of-date list
     /// fails safe (blocks activation) rather than billing a private customer with no threshold.
     /// </summary>
-    public const string PublicPlanIdsDefault = "free-trial,monthly,standard-monthly,annual";
+    public const string PublicPlanIdsDefault = "free-trial,standard-monthly,standard-annual";
 
     /// <summary>
     /// Comma-separated allowlist of PUBLIC marketplace plan ids (exact match against Partner

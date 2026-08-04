@@ -63,7 +63,7 @@ public class MeteredUserThresholdTest
     [TestMethod]
     public void AllowlistedPlansActivateWithoutThreshold()
     {
-        foreach (var planId in new[] { "free-trial", "monthly", "standard-monthly", "annual" })
+        foreach (var planId in new[] { "free-trial", "standard-monthly", "standard-annual" })
         {
             Assert.IsTrue(MeteredPlanGuard.IsPublicPlan(planId, DefaultAllowlist), $"{planId} should be public");
             Assert.IsFalse(MeteredPlanGuard.RequiresThreshold(planId, DefaultAllowlist), $"{planId} should not require N");
