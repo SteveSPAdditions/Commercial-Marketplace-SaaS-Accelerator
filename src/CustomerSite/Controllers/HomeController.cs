@@ -317,10 +317,37 @@ public class HomeController : BaseController
                             && subscriptionExtension.IsAutomaticProvisioningSupported
                             && MeteredPlanGuard.IsPublicPlan(subscriptionExtension.PlanId, this.saaSApiClientConfiguration?.PublicPlanIds))
                         {
-                            return await this.AutoActivateSubscriptionAsync(
-                                newSubscription.SubscriptionId,
-                                currentUserId,
-                                subscriptionExtension.SubscriptionParameters);
+                            // Repeat-free-trial gate: a purchaser who already consumed a full
+                            // trial window and comes back with a fresh isFreeTrial subscription
+                            // stays PendingFulfillmentStart for manual publisher activation.
+                            // Early re-subscribes (keeping a trial running) auto-activate as normal.
+                            if (this.IsRepeatFreeTrial(subscriptionData))
+                            {
+                                this.logger.Info(HttpUtility.HtmlEncode($"Blocking auto-activation of repeat free trial. SubscriptionId: {newSubscription.SubscriptionId}, PurchaserTenantId: {subscriptionData.Purchaser?.TenantId}"));
+                                await this.applicationLogService.AddApplicationLog($"Auto-activation blocked for repeat free trial {newSubscription.SubscriptionId} (purchaser tenant {subscriptionData.Purchaser?.TenantId}). Awaiting manual publisher activation.").ConfigureAwait(false);
+                                try
+                                {
+                                    // Same route as the legacy manual flow: park the subscription in
+                                    // PendingActivation and let the notification handler email the
+                                    // publisher (IsEmailEnabledForPendingActivation). Best-effort --
+                                    // the customer's landing must survive notification failures.
+                                    this.pendingFulfillmentStatusHandlers.Process(newSubscription.SubscriptionId);
+                                    this.notificationStatusHandlers.Process(newSubscription.SubscriptionId);
+                                }
+                                catch (Exception notifyEx)
+                                {
+                                    this.logger.Error($"Repeat-free-trial hold notifications failed for subscription {newSubscription.SubscriptionId} (non-fatal): {notifyEx.Message}", notifyEx);
+                                }
+
+                                this.TempData["ErrorMsg"] = "Your free trial requires publisher approval because a previous subscription from your organization was found. The publisher has been notified and will activate it shortly.";
+                            }
+                            else
+                            {
+                                return await this.AutoActivateSubscriptionAsync(
+                                    newSubscription.SubscriptionId,
+                                    currentUserId,
+                                    subscriptionExtension.SubscriptionParameters);
+                            }
                         }
                     }
                 }
@@ -413,6 +440,40 @@ public class HomeController : BaseController
         }
 
         return this.RedirectToAction(nameof(this.Subscriptions));
+    }
+
+    /// <summary>
+    /// True when the subscription is a free trial whose purchaser already consumed a full trial
+    /// window within the cooldown period, so auto-activation must yield to manual publisher
+    /// activation (see <see cref="FreeTrialGuard"/>). Non-trial subscriptions are never blocked.
+    /// Window and cooldown come from application config (FreeTrialRetryWindowDays /
+    /// FreeTrialCooldownDays) with 37-day / 365-day defaults.
+    /// </summary>
+    /// <param name="subscription">The subscription being considered for auto-activation, with purchaser and trial flag populated.</param>
+    /// <returns><c>true</c> when auto-activation must be blocked.</returns>
+    private bool IsRepeatFreeTrial(SubscriptionResult subscription)
+    {
+        if (subscription?.IsFreeTrial != true)
+        {
+            return false;
+        }
+
+        if (!int.TryParse(this.applicationConfigRepository.GetValueByName("FreeTrialRetryWindowDays"), out int retryWindowDays) || retryWindowDays <= 0)
+        {
+            retryWindowDays = FreeTrialGuard.DefaultRetryWindowDays;
+        }
+
+        if (!int.TryParse(this.applicationConfigRepository.GetValueByName("FreeTrialCooldownDays"), out int cooldownDays) || cooldownDays <= 0)
+        {
+            cooldownDays = FreeTrialGuard.DefaultCooldownDays;
+        }
+
+        var priorSubscriptions = this.subscriptionRepository.GetByPurchaser(
+            subscription.Purchaser?.TenantId,
+            subscription.Purchaser?.EmailId,
+            subscription.Id);
+
+        return FreeTrialGuard.BlocksAutoActivation(true, priorSubscriptions, DateTime.UtcNow, retryWindowDays, cooldownDays);
     }
 
     /// <summary>
@@ -715,6 +776,7 @@ public class HomeController : BaseController
             {
                 var userDetails = this.userRepository.GetPartnerDetailFromEmail(this.CurrentUserEmailAddress);
 
+                var selfServiceActivated = false;
                 if (subscriptionId != default)
                 {
                     this.logger.Info("GetPartnerSubscription");
@@ -742,7 +804,16 @@ public class HomeController : BaseController
                                 }
                             }
 
-                            if (Convert.ToBoolean(this.applicationConfigRepository.GetValueByName("IsAutomaticProvisioningSupported")))
+                            // Self-service activation only for public plans that are not repeat
+                            // free trials -- the same gates as the portal-entry auto-activation.
+                            // Private plans must not bypass the AdminSite metered-threshold gate,
+                            // and repeat trials wait for manual publisher activation; both fall to
+                            // the else branch, which parks the subscription in PendingActivation
+                            // for the publisher (and emails them when configured).
+                            selfServiceActivated = Convert.ToBoolean(this.applicationConfigRepository.GetValueByName("IsAutomaticProvisioningSupported"))
+                                && MeteredPlanGuard.IsPublicPlan(oldValue.PlanId, this.saaSApiClientConfiguration?.PublicPlanIds)
+                                && !this.IsRepeatFreeTrial(oldValue);
+                            if (selfServiceActivated)
                             {
                                 this.logger.Info(HttpUtility.HtmlEncode($"UpdateStateOfSubscription PendingActivation: SubscriptionId: {subscriptionId} "));
                                 if (oldValue.SubscriptionStatus.ToString() != SubscriptionStatusEnumExtension.PendingActivation.ToString())
@@ -802,9 +873,19 @@ public class HomeController : BaseController
                 this.notificationStatusHandlers.Process(subscriptionId);
 
                 if (operation == "Activate"
+                    && selfServiceActivated
                     && this.saaSApiClientConfiguration?.RedirectActivateToSetup == true)
                 {
                     return this.RedirectToAction("Index", "Setup", new { subscriptionId });
+                }
+
+                if (operation == "Activate" && !selfServiceActivated)
+                {
+                    // Parked in PendingActivation for the publisher (private plan or repeat free
+                    // trial) -- tell the customer instead of dropping them on a Setup wizard for a
+                    // subscription that is not active yet.
+                    this.TempData["ErrorMsg"] = "Your subscription requires publisher approval before it can be activated. The publisher has been notified and will activate it shortly.";
+                    return this.RedirectToAction(nameof(this.Subscriptions));
                 }
 
                 return this.RedirectToAction(nameof(this.ProcessMessage), new { action = operation, status = operation });

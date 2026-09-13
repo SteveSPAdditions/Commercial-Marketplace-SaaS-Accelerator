@@ -30,6 +30,7 @@ public partial class Subscriptions
     public string Term { get; set; }
     public DateTime? StartDate { get; set; }
     public DateTime? EndDate { get; set; }
+    public bool? IsFreeTrial { get; set; }
 
 
     public virtual Users User { get; set; }

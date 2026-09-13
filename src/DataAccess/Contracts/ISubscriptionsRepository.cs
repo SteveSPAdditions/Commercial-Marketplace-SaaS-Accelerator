@@ -30,6 +30,17 @@ public interface ISubscriptionsRepository : IDisposable, IBaseRepository<Subscri
     Subscriptions GetById(Guid subscriptionId, bool isIncludeDeactvated = false);
 
     /// <summary>
+    /// Gets all subscriptions (any status, including unsubscribed) belonging to the same
+    /// purchaser, matched by tenant id or, when the tenant is unknown, by purchaser email.
+    /// Used for free-trial history checks.
+    /// </summary>
+    /// <param name="purchaserTenantId">The purchaser tenant identifier (may be null).</param>
+    /// <param name="purchaserEmail">The purchaser email address (fallback match).</param>
+    /// <param name="excludeAmpSubscriptionId">A subscription to exclude (the one being evaluated).</param>
+    /// <returns>Prior subscriptions for the purchaser.</returns>
+    IEnumerable<Subscriptions> GetByPurchaser(Guid? purchaserTenantId, string purchaserEmail, Guid excludeAmpSubscriptionId);
+
+    /// <summary>
     /// Updates the status for subscription.
     /// </summary>
     /// <param name="subscriptionId">The subscription identifier.</param>

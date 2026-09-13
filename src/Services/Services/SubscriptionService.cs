@@ -70,7 +70,8 @@ public class SubscriptionService
             AmpOfferId = subscriptionDetail.OfferId,
             Term = subscriptionDetail.Term.TermUnit.ToString(),
             StartDate = subscriptionDetail.Term.StartDate.ToUniversalTime().DateTime,
-            EndDate = subscriptionDetail.Term.EndDate.ToUniversalTime().DateTime
+            EndDate = subscriptionDetail.Term.EndDate.ToUniversalTime().DateTime,
+            IsFreeTrial = subscriptionDetail.IsFreeTrial
         };
         return this.subscriptionRepository.Save(newSubscription);
     }
@@ -171,6 +172,7 @@ public class SubscriptionService
             CustomerEmailAddress = subscription.User?.EmailAddress,
             CustomerName = subscription.User?.FullName,
             IsMeteringSupported = existingPlanDetail != null ? (existingPlanDetail.IsmeteringSupported ?? false) : false,
+            IsFreeTrial = subscription.IsFreeTrial ?? false,
         };
 
         if (!Enum.TryParse<TermUnitEnum>(subscription.Term, out var termUnit))

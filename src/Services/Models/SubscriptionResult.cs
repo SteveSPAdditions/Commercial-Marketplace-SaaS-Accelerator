@@ -230,6 +230,15 @@ public class SubscriptionResult : SaaSApiResult
     [JsonPropertyName("term")]
     public TermResult Term { get; set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the subscription is a marketplace free trial.
+    /// </summary>
+    /// <value>
+    ///   <c>true</c> if the subscription is in its free-trial period; otherwise, <c>false</c>.
+    /// </value>
+    [JsonPropertyName("isFreeTrial")]
+    public bool IsFreeTrial { get; set; }
+
     /// <summary>Gets or sets the customer email address.</summary>
     /// <value>The customer email address.</value>
     public string CustomerEmailAddress { get; set; }

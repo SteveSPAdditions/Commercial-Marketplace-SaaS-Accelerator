@@ -54,7 +54,8 @@ static class ConversionHelper
                 TermUnit = subscription.Term.TermUnit.HasValue ? (Models.TermUnitEnum)subscription.Term.TermUnit :         Models.TermUnitEnum.P1M,
                 StartDate = subscription.Term.StartDate ?? default(DateTimeOffset),
                 EndDate = subscription.Term.EndDate ?? default(DateTimeOffset),
-            }
+            },
+            IsFreeTrial = subscription.IsFreeTrial ?? false,
         };
         return subscriptionResult;
     }

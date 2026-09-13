@@ -48,8 +48,9 @@ public class SubscriptionsRepository : ISubscriptionsRepository
             existingSubscriptions.Ampquantity = subscriptionDetails.Ampquantity;
             existingSubscriptions.AmpOfferId = subscriptionDetails.AmpOfferId;
             existingSubscriptions.Term = subscriptionDetails.Term;
-            existingSubscriptions.StartDate = subscriptionDetails.StartDate; 
+            existingSubscriptions.StartDate = subscriptionDetails.StartDate;
             existingSubscriptions.EndDate = subscriptionDetails.EndDate;
+            existingSubscriptions.IsFreeTrial = subscriptionDetails.IsFreeTrial ?? existingSubscriptions.IsFreeTrial;
 
             this.context.Subscriptions.Update(existingSubscriptions);
             this.context.SaveChanges();
@@ -196,6 +197,32 @@ public class SubscriptionsRepository : ISubscriptionsRepository
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Gets all subscriptions (any status, including unsubscribed) belonging to the same
+    /// purchaser, matched by tenant id or, when the tenant is unknown, by purchaser email.
+    /// Used for free-trial history checks.
+    /// </summary>
+    /// <param name="purchaserTenantId">The purchaser tenant identifier (may be null).</param>
+    /// <param name="purchaserEmail">The purchaser email address (fallback match).</param>
+    /// <param name="excludeAmpSubscriptionId">A subscription to exclude (the one being evaluated).</param>
+    /// <returns>Prior subscriptions for the purchaser.</returns>
+    public IEnumerable<Subscriptions> GetByPurchaser(Guid? purchaserTenantId, string purchaserEmail, Guid excludeAmpSubscriptionId)
+    {
+        var query = this.context.Subscriptions.Where(s => s.AmpsubscriptionId != excludeAmpSubscriptionId);
+        if (purchaserTenantId.HasValue && purchaserTenantId.Value != default)
+        {
+            return query.Where(s => s.PurchaserTenantId == purchaserTenantId.Value
+                || (s.PurchaserTenantId == null && s.PurchaserEmail == purchaserEmail)).ToList();
+        }
+
+        if (string.IsNullOrWhiteSpace(purchaserEmail))
+        {
+            return new List<Subscriptions>();
+        }
+
+        return query.Where(s => s.PurchaserEmail == purchaserEmail).ToList();
     }
 
     /// <summary>
