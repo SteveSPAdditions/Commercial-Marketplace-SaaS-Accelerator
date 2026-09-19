@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation. All rights reserved.
+﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for license information.
 
 using System;
@@ -62,6 +62,9 @@ public class ReconcileController : ControllerBase
                         where stc.AzureRegion != null
                         select new
                         {
+                            // Surrogate key, carried only as the dedup tie-break below. Stripped
+                            // before the response is built -- it is not part of the wire contract.
+                            consentId = stc.Id,
                             purchaserTenantId = stc.TenantId,
                             azureRegion = stc.AzureRegion,
                             ampSubscriptionId = stc.AmpSubscriptionId,
@@ -71,6 +74,7 @@ public class ReconcileController : ControllerBase
                 .ToList()
                 .Select(r => new
                 {
+                    r.consentId,
                     r.purchaserTenantId,
                     r.azureRegion,
                     r.ampSubscriptionId,
@@ -78,6 +82,42 @@ public class ReconcileController : ControllerBase
                     // push-authoritative reconcile corrector compares against the same
                     // vocabulary the live Fulfillment pull returns.
                     subscriptionStatus = SubscriptionStatusNormalizer.ToMarketplaceStatus(r.subscriptionStatus),
+                    r.modifiedUtc,
+                })
+
+                // ONE ROW PER PURCHASER TENANT.
+                //
+                // SubscriptionTenantConsent is unique on AmpSubscriptionId and NON-unique on
+                // TenantId (SaasKitContext.OnModelCreating), and SaveRegionAsync mints a new row
+                // per subscription -- so a tenant that cancels and re-purchases ends up with a row
+                // per subscription, every one of them keeping a non-null AzureRegion forever.
+                //
+                // Shipping all of them made the consumer's per-tenant reconcile loop write each in
+                // turn, logging "SubscriptionId drift" on every pass with the surviving value
+                // decided by row order. Observed on a test tenant 2026-09-19: two rows, drift
+                // logged on every run, never converging.
+                //
+                // Safe for the consumer: its TenantRegions table has a UNIQUE index on TenantId and
+                // so cannot hold two subscriptions for one tenant anyway. The snapshot should
+                // present the same model.
+                //
+                // A PREFERENCE, deliberately not a WHERE filter -- a tenant whose only subscription
+                // is Unsubscribed must still appear, because the MDBs keep TenantRegion rows for
+                // Unsubscribed/Suspended tenants (see the comment on the query above). Live beats
+                // dead; newest consent row breaks the tie, matching the ordering
+                // SubscriptionTenantConsentRepository.GetByTenantId already uses.
+                .GroupBy(r => r.purchaserTenantId)
+                .Select(g => g
+                    .OrderByDescending(r => IsLiveStatus(r.subscriptionStatus))
+                    .ThenByDescending(r => r.consentId)
+                    .First())
+
+                .Select(r => new
+                {
+                    r.purchaserTenantId,
+                    r.azureRegion,
+                    r.ampSubscriptionId,
+                    r.subscriptionStatus,
                     r.modifiedUtc,
                 })
                 .ToList();
@@ -104,6 +144,18 @@ public class ReconcileController : ControllerBase
             });
         }
     }
+
+    /// <summary>
+    /// True when the subscription is the tenant's current one. Values are Marketplace canonical
+    /// (the normalizer has already mapped Suspend -> Suspended). Suspended counts as live: it is
+    /// still the tenant's subscription and is recoverable. Anything else -- Unsubscribed,
+    /// PendingUnsubscribe, UnsubscribeFailed, ActivationFailed, UnRecognized -- is treated as dead
+    /// for ranking purposes only; such a tenant is still emitted when it has no better row.
+    /// </summary>
+    private static bool IsLiveStatus(string status)
+        => string.Equals(status, "Subscribed", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(status, "PendingFulfillmentStart", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(status, "Suspended", StringComparison.OrdinalIgnoreCase);
 
     private IActionResult VerifyHmac()
     {
