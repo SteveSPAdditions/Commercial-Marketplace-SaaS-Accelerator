@@ -27,7 +27,7 @@
         }
     </div>
     <div class="setup-step__body">
-        <h3 class="setup-step__title">Tenant consent for Read and Understood</h3>
+        <h3 class="setup-step__title">Tenant consent for Read & Understood</h3>
 
         @if (Model.Step3 == Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Locked)
         {
@@ -50,7 +50,7 @@
         else
         {
             <p class="setup-step__meta">
-                Grant tenant-wide consent so the Read and Understood runtime can be installed on the SharePoint sites you choose.
+                Grant tenant-wide consent so the Read & Understood runtime can be installed on the SharePoint sites you choose.
             </p>
             <a class="cm-button-default" href="/Setup/@Model.AmpSubscriptionId/Consent@(returnToQuery)">
                 Grant tenant consent

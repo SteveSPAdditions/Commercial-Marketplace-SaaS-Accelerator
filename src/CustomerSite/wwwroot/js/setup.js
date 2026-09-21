@@ -152,7 +152,7 @@ function setupConfirmOptions(form) {
         var url = form.getAttribute('data-site-url') || 'this site';
         return {
             title: 'Remove site?',
-            message: 'Read and Understood\'s permission on "' + url + '" will be revoked and ' +
+            message: 'Read & Understood\'s permission on "' + url + '" will be revoked and ' +
                 'the site will be removed from setup. Acknowledgement tracking on this site ' +
                 'will stop. This cannot be undone.',
             confirmText: 'Remove site',

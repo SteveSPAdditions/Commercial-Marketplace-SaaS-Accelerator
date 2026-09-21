@@ -119,7 +119,7 @@ public class SitePermissionService : ISitePermissionService
                     application = new
                     {
                         id = this.config.RuntimeAppClientId,
-                        displayName = "Read and Understood Runtime",
+                        displayName = "Read & Understood Runtime",
                     },
                 },
             },
