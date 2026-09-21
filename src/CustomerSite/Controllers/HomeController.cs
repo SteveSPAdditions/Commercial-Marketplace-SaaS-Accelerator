@@ -549,7 +549,7 @@ public class HomeController : BaseController
                     this.logger.LogError($"Cannot find subscription or subscription associated to the current user");
                     return this.RedirectToAction(nameof(this.Index));
                 }
-                subscriptionDetail.PlanList = this.subscriptionService.GetAllSubscriptionPlans();
+                subscriptionDetail.PlanList = this.subscriptionService.GetSubscriptionPlansForOffer(subscriptionDetail.OfferId, subscriptionDetail.PlanId);
 
                 return this.PartialView(subscriptionDetail);
             }

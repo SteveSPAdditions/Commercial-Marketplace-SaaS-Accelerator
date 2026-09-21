@@ -309,6 +309,39 @@ public class SubscriptionService
     }
 
     /// <summary>
+    /// Gets the plans a subscription can change to: only those belonging to the
+    /// subscription's own offer. The Plans table accumulates rows from every offer
+    /// ever resolved, so an unfiltered list shows plans from retired offers.
+    /// Falls back to the subscription's current plan if the offer has no plans
+    /// recorded, so the change-plan control is never empty.
+    /// </summary>
+    /// <param name="ampOfferId">The subscription's marketplace offer identifier.</param>
+    /// <param name="currentPlanId">The subscription's current marketplace plan identifier.</param>
+    /// <returns>Plans for the offer.</returns>
+    public List<PlanDetailResult> GetSubscriptionPlansForOffer(string ampOfferId, string currentPlanId)
+    {
+        var offerPlans = this.planRepository.GetPlansByAmpOfferId(ampOfferId);
+
+        if (offerPlans.Count == 0 && !string.IsNullOrWhiteSpace(currentPlanId))
+        {
+            var currentPlan = this.planRepository.GetById(currentPlanId);
+            if (currentPlan != null)
+            {
+                offerPlans.Add(currentPlan);
+            }
+        }
+
+        return (from plan in offerPlans
+            select new PlanDetailResult()
+            {
+                Id = plan.Id,
+                PlanId = plan.PlanId,
+                DisplayName = plan.DisplayName,
+                Description = plan.Description
+            }).ToList();
+    }
+
+    /// <summary>
     /// Get the plan details for subscription.
     /// </summary>
     /// <param name="subscriptionId">The subscription identifier.</param>

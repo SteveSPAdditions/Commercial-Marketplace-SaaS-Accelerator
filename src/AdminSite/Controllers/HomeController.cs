@@ -747,7 +747,7 @@ public class HomeController : BaseController
             if (this.User.Identity.IsAuthenticated)
             {
                 var subscriptionDetail = this.subscriptionService.GetSubscriptionsBySubscriptionId(subscriptionId);
-                subscriptionDetail.PlanList = this.subscriptionService.GetAllSubscriptionPlans();
+                subscriptionDetail.PlanList = this.subscriptionService.GetSubscriptionPlansForOffer(subscriptionDetail.OfferId, subscriptionDetail.PlanId);
 
                 return this.View(subscriptionDetail);
             }

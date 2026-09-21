@@ -70,6 +70,14 @@ public interface IPlansRepository : IDisposable, IBaseRepository<Plans>
     List<Plans> GetPlansByOfferId(Guid offerId);
 
     /// <summary>
+    /// Gets the plans that belong to the offer with the given marketplace offer identifier
+    /// (the string <c>OfferId</c> stored on <c>Offers</c> and <c>Subscriptions.AmpOfferId</c>).
+    /// </summary>
+    /// <param name="ampOfferId">The marketplace offer identifier.</param>
+    /// <returns> Plans for that offer only.</returns>
+    List<Plans> GetPlansByAmpOfferId(string ampOfferId);
+
+    /// <summary>
     /// Gets the plan attribute on offer attribute identifier.
     /// </summary>
     /// <param name="offerAttributeId">The offer attribute identifier.</param>

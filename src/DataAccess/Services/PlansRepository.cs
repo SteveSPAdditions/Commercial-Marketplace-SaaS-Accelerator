@@ -195,6 +195,27 @@ public class PlansRepository : IPlansRepository
     }
 
     /// <summary>
+    /// Gets the plans that belong to the offer with the given marketplace offer identifier.
+    /// Plans are keyed to offers by <c>Plans.OfferId</c> = <c>Offers.OfferGuid</c>, so this
+    /// resolves the string id through the Offers table.
+    /// </summary>
+    /// <param name="ampOfferId">The marketplace offer identifier.</param>
+    /// <returns> Plans for that offer only.</returns>
+    public List<Plans> GetPlansByAmpOfferId(string ampOfferId)
+    {
+        if (string.IsNullOrWhiteSpace(ampOfferId))
+        {
+            return new List<Plans>();
+        }
+
+        return (from plan in this.context.Plans
+                join offer in this.context.Offers on plan.OfferId equals offer.OfferGuid
+                where offer.OfferId == ampOfferId
+                orderby plan.Id
+                select plan).ToList();
+    }
+
+    /// <summary>
     /// Gets the plan attribute on offer attribute identifier.
     /// </summary>
     /// <param name="offerAttributeId">The offer attribute identifier.</param>
