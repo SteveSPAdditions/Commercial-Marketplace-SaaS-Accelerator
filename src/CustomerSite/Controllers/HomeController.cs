@@ -317,10 +317,9 @@ public class HomeController : BaseController
                             && subscriptionExtension.IsAutomaticProvisioningSupported
                             && MeteredPlanGuard.IsPublicPlan(subscriptionExtension.PlanId, this.saaSApiClientConfiguration?.PublicPlanIds))
                         {
-                            // Repeat-free-trial gate: a purchaser who already consumed a full
-                            // trial window and comes back with a fresh isFreeTrial subscription
-                            // stays PendingFulfillmentStart for manual publisher activation.
-                            // Early re-subscribes (keeping a trial running) auto-activate as normal.
+                            // Repeat-free-trial gate: a purchaser who has already had a free
+                            // trial and comes back with a fresh isFreeTrial subscription stays
+                            // PendingFulfillmentStart for manual publisher activation.
                             if (this.IsRepeatFreeTrial(subscriptionData))
                             {
                                 this.logger.Info(HttpUtility.HtmlEncode($"Blocking auto-activation of repeat free trial. SubscriptionId: {newSubscription.SubscriptionId}, PurchaserTenantId: {subscriptionData.Purchaser?.TenantId}"));
@@ -443,11 +442,10 @@ public class HomeController : BaseController
     }
 
     /// <summary>
-    /// True when the subscription is a free trial whose purchaser already consumed a full trial
-    /// window within the cooldown period, so auto-activation must yield to manual publisher
-    /// activation (see <see cref="FreeTrialGuard"/>). Non-trial subscriptions are never blocked.
-    /// Window and cooldown come from application config (FreeTrialRetryWindowDays /
-    /// FreeTrialCooldownDays) with 37-day / 365-day defaults.
+    /// True when the subscription is a free trial whose purchaser has already had a free trial
+    /// (any prior trial subscription, any status, any age), so auto-activation must yield to
+    /// manual publisher activation (see <see cref="FreeTrialGuard"/>). One trial per purchaser,
+    /// ever. Non-trial subscriptions are never blocked.
     /// </summary>
     /// <param name="subscription">The subscription being considered for auto-activation, with purchaser and trial flag populated.</param>
     /// <returns><c>true</c> when auto-activation must be blocked.</returns>
@@ -458,22 +456,12 @@ public class HomeController : BaseController
             return false;
         }
 
-        if (!int.TryParse(this.applicationConfigRepository.GetValueByName("FreeTrialRetryWindowDays"), out int retryWindowDays) || retryWindowDays <= 0)
-        {
-            retryWindowDays = FreeTrialGuard.DefaultRetryWindowDays;
-        }
-
-        if (!int.TryParse(this.applicationConfigRepository.GetValueByName("FreeTrialCooldownDays"), out int cooldownDays) || cooldownDays <= 0)
-        {
-            cooldownDays = FreeTrialGuard.DefaultCooldownDays;
-        }
-
         var priorSubscriptions = this.subscriptionRepository.GetByPurchaser(
             subscription.Purchaser?.TenantId,
             subscription.Purchaser?.EmailId,
             subscription.Id);
 
-        return FreeTrialGuard.BlocksAutoActivation(true, priorSubscriptions, DateTime.UtcNow, retryWindowDays, cooldownDays);
+        return FreeTrialGuard.BlocksAutoActivation(true, priorSubscriptions);
     }
 
     /// <summary>
