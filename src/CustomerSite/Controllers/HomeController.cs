@@ -145,7 +145,8 @@ public class HomeController : BaseController
         IAppVersionService appVersionService,
         SaaSApiClientConfiguration saaSApiClientConfiguration,
         ISetupStatusService setupStatusService,
-        ISubscriptionSignalService subscriptionSignalService) : base(appVersionService)
+        ISubscriptionSignalService subscriptionSignalService,
+        ISetupCarryOverService setupCarryOverService) : base(appVersionService)
     {
         this.saaSApiClientConfiguration = saaSApiClientConfiguration;
         this.setupStatusService = setupStatusService;
@@ -178,7 +179,8 @@ public class HomeController : BaseController
             planRepository,
             userRepository,
             loggerFactory.CreateLogger<PendingActivationStatusHandler>(),
-            subscriptionSignalService);
+            subscriptionSignalService,
+            setupCarryOverService);
 
         this.pendingFulfillmentStatusHandlers = new PendingFulfillmentStatusHandler(
             apiService,

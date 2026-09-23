@@ -171,7 +171,8 @@ public class HomeController : BaseController
         SaaSClientLogger<HomeController> logger,
         ISubscriptionSignalService subscriptionSignalService,
         ISubscriptionTenantConsentRepository subscriptionTenantConsentRepository,
-        IUsageLedgerReadRepository usageLedgerReadRepository) : base(applicationConfigRepository, appVersionService)
+        IUsageLedgerReadRepository usageLedgerReadRepository,
+        ISetupCarryOverService setupCarryOverService) : base(applicationConfigRepository, appVersionService)
     {
         this.subscriptionTenantConsentRepository = subscriptionTenantConsentRepository;
         this.usageLedgerReadRepository = usageLedgerReadRepository;
@@ -208,7 +209,8 @@ public class HomeController : BaseController
             planRepository,
             userRepository,
             loggerFactory.CreateLogger<PendingActivationStatusHandler>(),
-            subscriptionSignalService);
+            subscriptionSignalService,
+            setupCarryOverService);
 
         this.pendingFulfillmentStatusHandlers = new PendingFulfillmentStatusHandler(
             fulfillApiService,

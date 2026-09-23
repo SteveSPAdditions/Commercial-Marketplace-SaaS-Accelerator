@@ -283,6 +283,10 @@ public class Startup
         // Metered user threshold (N) capture at manual activation, and the signal service's
         // threshold read, both need the consent row.
         services.AddScoped<ISubscriptionTenantConsentRepository, SubscriptionTenantConsentRepository>();
+        // Manual (private-plan) activation runs PendingActivationStatusHandler here too, so the
+        // resubscribe region carry-over must be available on this side as well.
+        services.AddScoped<ISubscriptionSiteRepository, SubscriptionSiteRepository>();
+        services.AddScoped<ISetupCarryOverService, SetupCarryOverService>();
         services.AddScoped<IWebhookOperationLogRepository, WebhookOperationLogRepository>();
         services.AddScoped<IWebhookCaptureRepository, WebhookCaptureRepository>();
         // Read-only view of the UsageLedger (written by the external RauMetering

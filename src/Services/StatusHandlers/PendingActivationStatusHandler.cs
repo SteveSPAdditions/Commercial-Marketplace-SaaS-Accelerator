@@ -40,6 +40,12 @@ public class PendingActivationStatusHandler : AbstractSubscriptionStatusHandler
     private readonly ISubscriptionSignalService subscriptionSignalService;
 
     /// <summary>
+    /// Carries the tenant's region onto a resubscribed subscription at activation. Optional/nullable
+    /// like the signal service: hosts that don't wire it up fall back to Setup's per-load self-heal.
+    /// </summary>
+    private readonly ISetupCarryOverService setupCarryOverService;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="PendingActivationStatusHandler"/> class.
     /// </summary>
     /// <param name="fulfillApiService">The fulfill API client.</param>
@@ -49,6 +55,7 @@ public class PendingActivationStatusHandler : AbstractSubscriptionStatusHandler
     /// <param name="usersRepository">The users repository.</param>
     /// <param name="logger">The logger.</param>
     /// <param name="subscriptionSignalService">Enqueues the RAU "Activated" signal on successful activation.</param>
+    /// <param name="setupCarryOverService">Carries the previous subscription's region onto a resubscribe at activation.</param>
     public PendingActivationStatusHandler(
         IFulfillmentApiService fulfillApiService,
         ISubscriptionsRepository subscriptionsRepository,
@@ -56,13 +63,15 @@ public class PendingActivationStatusHandler : AbstractSubscriptionStatusHandler
         IPlansRepository plansRepository,
         IUsersRepository usersRepository,
         ILogger<PendingActivationStatusHandler> logger,
-        ISubscriptionSignalService subscriptionSignalService = null)
+        ISubscriptionSignalService subscriptionSignalService = null,
+        ISetupCarryOverService setupCarryOverService = null)
         : base(subscriptionsRepository, plansRepository, usersRepository)
     {
         this.fulfillmentApiService = fulfillApiService;
         this.subscriptionLogRepository = subscriptionLogRepository;
         this.logger = logger;
         this.subscriptionSignalService = subscriptionSignalService;
+        this.setupCarryOverService = setupCarryOverService;
     }
 
     /// <summary>
@@ -110,6 +119,22 @@ public class PendingActivationStatusHandler : AbstractSubscriptionStatusHandler
                 // ActivationFailed.
                 new SubscriptionTermRefreshService(this.fulfillmentApiService, this.subscriptionsRepository, this.logger)
                     .RefreshTermAsync(subscriptionID).ConfigureAwait(false).GetAwaiter().GetResult();
+
+                // Resubscribe: carry the tenant's region onto the new subscription NOW, not on its
+                // first Setup visit. The reconcile snapshot only names subscriptions that have a
+                // region row, so without this a free-plan re-purchase that auto-activates and is
+                // never opened in Setup leaves the snapshot pointing at the dead predecessor, and
+                // RAU's daily reconcile could revert the TenantRegions row the signal below adopts.
+                // Best-effort; the service never throws. No-op on a first purchase.
+                this.setupCarryOverService?.CarryOverRegionFromPreviousSubscription(
+                    subscriptionID, subscription.PurchaserTenantId ?? Guid.Empty);
+
+                // And the site list, here too, so the carry-over runs exactly once per subscription
+                // by construction (activation is a one-time transition). Seeding on Setup load
+                // instead re-seeded the predecessor's sites every time the customer emptied the
+                // list. Structure only: rows land Pending and must be re-granted. Best-effort.
+                this.setupCarryOverService?.CarryOverFromPreviousSubscription(
+                    subscriptionID, subscription.PurchaserTenantId ?? Guid.Empty);
 
                 // Signal RAU that the subscription is now active. This is what flips RAU's cached
                 // MarketplaceSubscriptionStatus back to Subscribed on a resubscribe (the only path that

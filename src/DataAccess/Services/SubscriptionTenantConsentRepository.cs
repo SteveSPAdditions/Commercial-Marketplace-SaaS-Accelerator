@@ -33,6 +33,14 @@ public class SubscriptionTenantConsentRepository : ISubscriptionTenantConsentRep
             .FirstOrDefault();
     }
 
+    public SubscriptionTenantConsent GetPreviousByTenantId(Guid tenantId, Guid excludeAmpSubscriptionId)
+    {
+        return this.context.SubscriptionTenantConsent
+            .Where(x => x.TenantId == tenantId && x.AmpSubscriptionId != excludeAmpSubscriptionId)
+            .OrderByDescending(x => x.Id)
+            .FirstOrDefault();
+    }
+
     public int Save(SubscriptionTenantConsent entity)
     {
         var now = DateTime.UtcNow;

@@ -18,6 +18,13 @@ public interface ISubscriptionTenantConsentRepository
     /// <summary>Get an existing row for a tenant (most recent), or null.</summary>
     SubscriptionTenantConsent GetByTenantId(Guid tenantId);
 
+    /// <summary>
+    /// Get the tenant's most recent row belonging to a DIFFERENT subscription than the one given, or
+    /// null. The "previous subscription" lookup for resubscribe carry-over: once the new subscription
+    /// has its own row, <see cref="GetByTenantId"/> would return that row rather than its predecessor.
+    /// </summary>
+    SubscriptionTenantConsent GetPreviousByTenantId(Guid tenantId, Guid excludeAmpSubscriptionId);
+
     /// <summary>Insert or update.</summary>
     int Save(SubscriptionTenantConsent entity);
 }
