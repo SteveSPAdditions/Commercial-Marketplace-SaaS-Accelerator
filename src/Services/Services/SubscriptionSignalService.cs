@@ -88,7 +88,7 @@ public class SubscriptionSignalService : ISubscriptionSignalService
                 modifiedUtc = now,
                 occurredBy = "Accelerator",
                 meteredUserThreshold = consent?.MeteredUserThreshold,
-                marketplaceTermStartUtc = subscription.StartDate,
+                marketplaceTermStartUtc = SubscriptionTermRefreshService.UsableOrNull(subscription.StartDate),
             };
 
             var entry = new NotificationOutbox

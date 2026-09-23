@@ -69,8 +69,14 @@ public class SubscriptionService
             PurchaserTenantId = subscriptionDetail.Purchaser.TenantId,
             AmpOfferId = subscriptionDetail.OfferId,
             Term = subscriptionDetail.Term.TermUnit.ToString(),
-            StartDate = subscriptionDetail.Term.StartDate.ToUniversalTime().DateTime,
-            EndDate = subscriptionDetail.Term.EndDate.ToUniversalTime().DateTime,
+            // A not-yet-populated term deserialises to DateTimeOffset.MinValue; store null rather
+            // than 0001-01-01 so downstream readers (signals, Change Plan, reports) see "unknown".
+            StartDate = SubscriptionTermRefreshService.HasUsableTerm(subscriptionDetail.Term)
+                ? subscriptionDetail.Term.StartDate.ToUniversalTime().DateTime
+                : (DateTime?)null,
+            EndDate = SubscriptionTermRefreshService.HasUsableTerm(subscriptionDetail.Term)
+                ? subscriptionDetail.Term.EndDate.ToUniversalTime().DateTime
+                : (DateTime?)null,
             IsFreeTrial = subscriptionDetail.IsFreeTrial
         };
         return this.subscriptionRepository.Save(newSubscription);

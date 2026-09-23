@@ -48,8 +48,10 @@ public class SubscriptionsRepository : ISubscriptionsRepository
             existingSubscriptions.Ampquantity = subscriptionDetails.Ampquantity;
             existingSubscriptions.AmpOfferId = subscriptionDetails.AmpOfferId;
             existingSubscriptions.Term = subscriptionDetails.Term;
-            existingSubscriptions.StartDate = subscriptionDetails.StartDate;
-            existingSubscriptions.EndDate = subscriptionDetails.EndDate;
+            // A resolve that arrives before Microsoft has populated the term carries null dates;
+            // keep whatever real term the row already holds rather than blanking it.
+            existingSubscriptions.StartDate = subscriptionDetails.StartDate ?? existingSubscriptions.StartDate;
+            existingSubscriptions.EndDate = subscriptionDetails.EndDate ?? existingSubscriptions.EndDate;
             existingSubscriptions.IsFreeTrial = subscriptionDetails.IsFreeTrial ?? existingSubscriptions.IsFreeTrial;
 
             this.context.Subscriptions.Update(existingSubscriptions);

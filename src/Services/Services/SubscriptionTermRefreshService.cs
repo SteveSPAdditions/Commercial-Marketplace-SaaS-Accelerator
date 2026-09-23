@@ -5,6 +5,7 @@ using System;
 using System.Threading.Tasks;
 using Marketplace.SaaS.Accelerator.DataAccess.Contracts;
 using Marketplace.SaaS.Accelerator.Services.Contracts;
+using Marketplace.SaaS.Accelerator.Services.Models;
 using Microsoft.Extensions.Logging;
 using ILogger = Microsoft.Extensions.Logging.ILogger;
 
@@ -57,6 +58,20 @@ public class SubscriptionTermRefreshService
                 return false;
             }
 
+            // Fulfillment populates the term a moment AFTER Activate returns; the immediate re-pull
+            // from PendingActivationStatusHandler therefore often carries a term object whose dates
+            // are still unset. TermResult's dates are non-nullable, so "unset" deserialises to
+            // DateTimeOffset.MinValue. Writing that would stamp 0001-01-01 on the row and ship it in
+            // the "Activated" signal as marketplaceTermStartUtc. Leave the row alone instead: the
+            // next webhook or the daily reconcile carries the real term.
+            if (!HasUsableTerm(live.Term))
+            {
+                this.logger?.LogWarning(
+                    "Term refresh skipped for {SubscriptionId}: Fulfillment API returned a term with unset dates (not yet populated).",
+                    subscriptionId);
+                return false;
+            }
+
             this.subscriptionsRepository.UpdateTermForSubscription(
                 subscriptionId,
                 live.Term.TermUnit.ToString(),
@@ -77,4 +92,20 @@ public class SubscriptionTermRefreshService
             return false;
         }
     }
+
+    /// <summary>
+    /// True when the Fulfillment term carries real dates. A term whose start or end is
+    /// <see cref="DateTimeOffset.MinValue"/> has not been populated by Microsoft yet.
+    /// </summary>
+    public static bool HasUsableTerm(TermResult term)
+        => term != null
+           && term.StartDate != DateTimeOffset.MinValue
+           && term.EndDate != DateTimeOffset.MinValue;
+
+    /// <summary>
+    /// Normalises a persisted term date for outbound signals: the 0001-01-01 sentinel that an
+    /// unpopulated term leaves behind is reported as null so receivers "leave unchanged".
+    /// </summary>
+    public static DateTime? UsableOrNull(DateTime? termDate)
+        => termDate.HasValue && termDate.Value > DateTime.MinValue ? termDate : null;
 }
