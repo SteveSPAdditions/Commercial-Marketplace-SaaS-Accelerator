@@ -287,6 +287,9 @@ public class Startup
         // resubscribe region carry-over must be available on this side as well.
         services.AddScoped<ISubscriptionSiteRepository, SubscriptionSiteRepository>();
         services.AddScoped<ISetupCarryOverService, SetupCarryOverService>();
+        // Terms gate: the subscription detail page shows who accepted the Marketplace terms and when.
+        services.AddScoped<ISubscriptionTermsAcceptanceRepository, SubscriptionTermsAcceptanceRepository>();
+        services.AddScoped<ITermsAcceptanceService, TermsAcceptanceService>();
         services.AddScoped<IWebhookOperationLogRepository, WebhookOperationLogRepository>();
         services.AddScoped<IWebhookCaptureRepository, WebhookCaptureRepository>();
         // Read-only view of the UsageLedger (written by the external RauMetering

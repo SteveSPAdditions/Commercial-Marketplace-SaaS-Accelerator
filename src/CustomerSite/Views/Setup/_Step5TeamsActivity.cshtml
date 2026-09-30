@@ -29,7 +29,7 @@
 
         @if (Model.Step5 == Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Locked)
         {
-            <p class="setup-step__meta">Available after tenant consent.</p>
+            <p class="setup-step__meta">@(Model.TermsBlocking ? "Available after you accept the terms." : "Available after tenant consent.")</p>
         }
         else if (Model.TeamsActivity != null && Model.TeamsActivity.Granted)
         {

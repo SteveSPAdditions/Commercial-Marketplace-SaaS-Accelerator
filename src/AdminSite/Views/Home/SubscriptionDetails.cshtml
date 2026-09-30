@@ -140,6 +140,33 @@
                                 }
                             </dd>
                         }
+                        @if (Model.TermsAcceptanceRequired || Model.TermsAcceptance != null)
+                        {
+                            <dt class="col-sm-3 p-2 p10">
+                                @Html.DisplayName("Marketplace Terms ")
+                            </dt>
+                            <dd class="col-sm-9 p-2 p10">
+                                @if (Model.TermsAcceptance == null)
+                                {
+                                    <span class="text-muted">Not yet accepted &mdash; the customer's Setup steps are locked until they agree on the customer portal.</span>
+                                }
+                                else
+                                {
+                                    var ta = Model.TermsAcceptance;
+                                    <div>
+                                        Accepted by <strong>@ta.AcceptedByUpn</strong>
+                                        @if (!string.IsNullOrEmpty(ta.AcceptedByDisplayName)) { <text>(@ta.AcceptedByDisplayName)</text> }
+                                        on <strong>@ta.AcceptedUtc.ToString("yyyy-MM-dd HH:mm") UTC</strong>
+                                    </div>
+                                    <small class="form-text text-muted">
+                                        <a href="@ta.MicrosoftContractUrl" target="_blank" rel="noopener">Microsoft Standard Contract</a>@(string.IsNullOrEmpty(ta.MicrosoftContractVersion) ? "" : $" v{ta.MicrosoftContractVersion}")
+                                        &middot;
+                                        <a href="@ta.PublisherAmendmentUrl" target="_blank" rel="noopener">@(ta.PublisherAmendmentTitle ?? "Publisher amendment")</a>@(string.IsNullOrEmpty(ta.PublisherAmendmentVersion) ? "" : $" v{ta.PublisherAmendmentVersion}")
+                                        @if (!string.IsNullOrEmpty(ta.IpAddress)) { <text>&middot; from @ta.IpAddress</text> }
+                                    </small>
+                                }
+                            </dd>
+                        }
                     </dl>
                 </div>
                 <div style="text-align: right !important;">

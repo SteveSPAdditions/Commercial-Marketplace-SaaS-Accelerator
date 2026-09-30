@@ -58,7 +58,7 @@ Operational against the customer's selected SharePoint sites
    - With `RedirectActivateToSetup = true`, the moment the customer activates they are routed straight into the setup wizard (`/Setup/{subscriptionId}`); otherwise they reach it via the **Continue setup** link.
    - **Activation only sets billing/subscription state — it does not unlock the product.** Real access is still gated by `appaddin2` verifying all five custom steps below.
 
-The customer's subscriptions list then shows a **setup progress pill** ("Setup: X of 5" / "Setup: complete") and a **Continue setup** link so the wizard can be resumed at any time.
+The customer's subscriptions list then shows a **setup progress pill** ("Setup: X of 6" / "Setup: complete") and a **Continue setup** link so the wizard can be resumed at any time.
 
 ---
 
@@ -71,6 +71,16 @@ The wizard is a gated checklist: each step unlocks the next. Progress and comple
 - **What the user sees:** A confirmation card that the subscription is active. Activation is the customer's own **Activate** click (Section 2, step 3) — no operator.
 - **How it completes:** Satisfied once the subscription is `Subscribed`.
 - **Gates:** Unlocks Step 2.
+
+### Terms gate — Agree to the Marketplace terms and the publisher amendment *(portal-only step, added 2026-09-30)*
+
+- **What the user sees:** Directly under Step 1, a card with **two checkboxes** — one for the [Microsoft Standard Contract](https://go.microsoft.com/fwlink/?linkid=2041178) and one for the **SP Additions amendment** to it — each linking to the document, and an **Accept and continue** button that is disabled until both are ticked. Every later step shows *Locked — available after you accept the terms*.
+- **Why it exists:** The customer already agreed to both documents when purchasing in the Marketplace, but the amendment is only offered there as an HTML *download*, which is easy to skip. This step is a confirmed re-acknowledgement with a proper record. The amendment is therefore hosted as a page on the customer portal (`/legal/amendment-v1.html`) so it renders in-browser.
+- **How it completes:** Any user in the subscription's tenant (the same authorisation rule as the rest of Setup) ticks both boxes and submits. An append-only row is written to `SubscriptionTermsAcceptance` recording who (UPN, Entra object id, display name), when (UTC), the exact **URLs and version labels** of both documents as presented, IP address and user agent. A `TermsAccepted` entry is added to the subscription audit log and a confirmation email (with links to both documents) is sent to the accepter.
+- **Gates:** Enforced server-side — every mutating Setup action (region save, consent, add/grant/remove site, Teams consent) refuses while the gate is unsatisfied, and the silent region auto-detect does not run. Steps that are *already* complete are never shown as regressed.
+- **One acceptance per subscription, ever.** Changing the configured document versions later does **not** re-prompt; the versions on the row are a record of what was shown, not a re-consent trigger. Not carried over on resubscribe (a new purchase is a new confirmation).
+- **Configuration** (`ApplicationConfiguration`, admin portal → Application Config): `TermsAcceptanceRequired` (kill switch, default `true`), `TermsMicrosoftContractTitle/Url/Version`, `TermsPublisherAmendmentTitle/Url/Version`, `IsEmailEnabledForTermsAcceptance`. **Fails closed:** with the gate on and either URL blank, the step shows "not configured, contact support" and Setup stays locked.
+- **Not an `appaddin2` signal.** Because Steps 2–5 cannot be actioned without it, a subscription that satisfies the five signals in Section 4 has necessarily passed the gate; `appaddin2` does not need to check it. The admin portal's subscription detail page shows who accepted and when.
 
 ### Step 2 — Select Azure region (data residency & processing)
 
@@ -166,6 +176,7 @@ This step uses the **`Sites.Selected`** model so Read & Understood only ever has
 | Step | User action | Result / what it grants | Completion condition |
 |------|-------------|-------------------------|----------------------|
 | 1. Active | customer clicks Activate (self-service, no operator) | Subscription activated; wizard unlocked | Subscription `Subscribed` |
+| Terms gate | Tick both boxes (Standard Contract + amendment), Accept | `SubscriptionTermsAcceptance` row (who / when / document versions); audit log; confirmation email | Acceptance row exists (portal-only; not an `appaddin2` signal) |
 | 2. Region | Pick Azure region | Data residency/processing region set; regional fan-out triggered | Region saved **and** fan-out complete |
 | 3. Consent | Admin grants tenant consent | Runtime enterprise app consented in customer tenant | Admin consent recorded |
 | 4. Sites | Add site → grant → downgrade to read | Per-site `Sites.Selected` access (manage → read) for the runtime app | All enrolled sites Granted (target role: read) |

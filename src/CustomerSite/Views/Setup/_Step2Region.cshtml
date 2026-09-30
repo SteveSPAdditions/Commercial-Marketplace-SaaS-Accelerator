@@ -20,6 +20,10 @@
         {
             <i class="fa fa-circle-o-notch fa-spin"></i>
         }
+        else if (Model.Step2 == Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Locked)
+        {
+            <i class="fa fa-lock"></i>
+        }
         else
         {
             <i class="fa fa-circle-o"></i>
@@ -28,7 +32,11 @@
     <div class="setup-step__body">
         <h3 class="setup-step__title">Application and Database hosting Azure region</h3>
 
-        @if (picker == null)
+        @if (Model.Step2 == Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Locked)
+        {
+            <p class="setup-step__meta">Available after you accept the terms.</p>
+        }
+        else if (picker == null)
         {
             <p class="setup-step__meta">Loading region information&hellip;</p>
         }

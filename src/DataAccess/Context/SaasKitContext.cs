@@ -45,6 +45,7 @@ public partial class SaasKitContext : DbContext
 
     public virtual DbSet<SubscriptionTenantConsent> SubscriptionTenantConsent { get; set; }
     public virtual DbSet<SubscriptionSite> SubscriptionSite { get; set; }
+    public virtual DbSet<SubscriptionTermsAcceptance> SubscriptionTermsAcceptance { get; set; }
     public virtual DbSet<NotificationOutbox> NotificationOutbox { get; set; }
     public virtual DbSet<WebhookOperationLog> WebhookOperationLog { get; set; }
     public virtual DbSet<WebhookCapture> WebhookCapture { get; set; }
@@ -555,6 +556,25 @@ public partial class SaasKitContext : DbContext
             entity.Property(e => e.PlanId).IsUnicode(false);
             entity.Property(e => e.Dimension).IsUnicode(false);
             entity.Property(e => e.Frequency).IsUnicode(false);
+        });
+
+        modelBuilder.Entity<SubscriptionTermsAcceptance>(entity =>
+        {
+            entity.HasIndex(e => e.AmpSubscriptionId);
+            entity.HasIndex(e => e.TenantId);
+
+            entity.Property(e => e.AcceptedUtc).HasColumnType("datetime");
+            entity.Property(e => e.AcceptedByUpn).HasMaxLength(255).IsUnicode(false);
+            entity.Property(e => e.AcceptedByObjectId).HasMaxLength(64).IsUnicode(false);
+            entity.Property(e => e.AcceptedByDisplayName).HasMaxLength(255);
+            entity.Property(e => e.MicrosoftContractUrl).HasMaxLength(1000);
+            entity.Property(e => e.MicrosoftContractVersion).HasMaxLength(64);
+            entity.Property(e => e.PublisherAmendmentTitle).HasMaxLength(255);
+            entity.Property(e => e.PublisherAmendmentUrl).HasMaxLength(1000);
+            entity.Property(e => e.PublisherAmendmentVersion).HasMaxLength(64);
+            entity.Property(e => e.IpAddress).HasMaxLength(64).IsUnicode(false);
+            entity.Property(e => e.UserAgent).HasMaxLength(512);
+            entity.Property(e => e.Source).HasMaxLength(32).IsUnicode(false);
         });
 
         modelBuilder.Entity<SubscriptionTenantConsent>(entity =>

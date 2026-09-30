@@ -10,6 +10,7 @@ using Marketplace.SaaS.Accelerator.CustomerSite.Models;
 using Marketplace.SaaS.Accelerator.DataAccess.Contracts;
 using Marketplace.SaaS.Accelerator.Services.Configurations;
 using Marketplace.SaaS.Accelerator.Services.Contracts;
+using Marketplace.SaaS.Accelerator.Services.Models;
 using Marketplace.SaaS.Accelerator.Services.Services;
 using Marketplace.SaaS.Accelerator.Services.Utilities;
 using Microsoft.AspNetCore.Mvc;
@@ -19,7 +20,9 @@ namespace Marketplace.SaaS.Accelerator.CustomerSite.Controllers;
 
 /// <summary>
 /// Persistent post-acceptance setup page for Read and Understood.
-/// Steps: 1 subscription active (auto) - 2 database region - 3 tenant consent - 4 sites.
+/// Steps: 1 subscription active (auto) - terms gate - 2 database region - 3 tenant consent - 4 sites
+/// - 5 Teams activity consent. The terms gate (<see cref="ITermsAcceptanceService"/>) must be
+/// satisfied before any other step can be actioned.
 /// </summary>
 public class SetupController : BaseController
 {
@@ -30,6 +33,7 @@ public class SetupController : BaseController
     private readonly ITenantAdminConsentService consentService;
     private readonly ISitePermissionService sitePermissionService;
     private readonly ITokenAcquisition tokenAcquisition;
+    private readonly ITermsAcceptanceService termsService;
     private readonly SaaSApiClientConfiguration config;
     private readonly SaaSClientLogger<SetupController> logger;
 
@@ -54,6 +58,7 @@ public class SetupController : BaseController
         ITenantAdminConsentService consentService,
         ISitePermissionService sitePermissionService,
         ITokenAcquisition tokenAcquisition,
+        ITermsAcceptanceService termsService,
         SaaSApiClientConfiguration config,
         SaaSClientLogger<SetupController> logger) : base(appVersionService)
     {
@@ -64,6 +69,7 @@ public class SetupController : BaseController
         this.consentService = consentService;
         this.sitePermissionService = sitePermissionService;
         this.tokenAcquisition = tokenAcquisition;
+        this.termsService = termsService;
         this.config = config;
         this.logger = logger;
     }
@@ -79,6 +85,34 @@ public class SetupController : BaseController
                 ?? this.User?.FindFirst("tid")?.Value;
             return Guid.TryParse(tid, out var t) ? t : Guid.Empty;
         }
+    }
+
+    /// <summary>Signed-in user's Entra object id (the 'oid' claim), or null if absent.</summary>
+    private string CurrentUserObjectId =>
+        this.User?.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value
+        ?? this.User?.FindFirst("oid")?.Value;
+
+    /// <summary>
+    /// Terms gate for mutating Setup actions. Returns true (with a redirect-to-Index result carrying
+    /// an error flash) when the subscription has not accepted the terms and the gate is switched on.
+    /// Every action that changes Setup state calls this right after <see cref="TryAuthorizeSetup"/>,
+    /// so the lock the checklist shows is enforced server-side, not just hidden in the UI.
+    /// </summary>
+    private bool TermsGateBlocks(Guid subscriptionId, out IActionResult blocked)
+    {
+        var terms = this.termsService.GetStatus(subscriptionId);
+        if (terms.IsSatisfied)
+        {
+            blocked = null;
+            return false;
+        }
+
+        this.TempData["FlashMessage"] = terms.IsMisconfigured
+            ? "The terms documents have not been configured on this portal, so setup cannot continue yet. Please contact support."
+            : "Please accept the terms before continuing with setup.";
+        this.TempData["FlashIsError"] = true;
+        blocked = this.RedirectToAction(nameof(Index), new { subscriptionId });
+        return true;
     }
 
     /// <summary>
@@ -190,6 +224,11 @@ public class SetupController : BaseController
         var consent = this.consentRepo.GetByAmpSubscriptionId(subscriptionId);
         var sites = this.siteRepo.ListBySubscription(subscriptionId).ToList();
 
+        // Terms gate first: while it blocks, no later step may be actioned -- including the
+        // silent region auto-detect/auto-save below, which is a write on the customer's behalf.
+        var terms = this.termsService.GetStatus(subscriptionId);
+        var termsBlocking = !terms.IsSatisfied;
+
         var vm = new SetupViewModel
         {
             AmpSubscriptionId = subscriptionId,
@@ -197,6 +236,26 @@ public class SetupController : BaseController
             PlanId = subscription.AmpplanId,
             TenantId = tenantId,
             Step1 = StepState.Complete,
+            TermsBlocking = termsBlocking,
+            StepTerms = !terms.Required ? StepState.Complete
+                : terms.Accepted ? StepState.Complete
+                : terms.IsMisconfigured ? StepState.Failed
+                : StepState.NotStarted,
+            Terms = new TermsStepViewModel
+            {
+                Required = terms.Required,
+                Accepted = terms.Accepted,
+                Misconfigured = terms.IsMisconfigured,
+                MicrosoftContract = terms.MicrosoftContract,
+                PublisherAmendment = terms.PublisherAmendment,
+                AcceptedUtc = terms.Acceptance?.AcceptedUtc,
+                AcceptedByUpn = terms.Acceptance?.AcceptedByUpn,
+                AcceptedMicrosoftContractUrl = terms.Acceptance?.MicrosoftContractUrl,
+                AcceptedMicrosoftContractVersion = terms.Acceptance?.MicrosoftContractVersion,
+                AcceptedPublisherAmendmentTitle = terms.Acceptance?.PublisherAmendmentTitle,
+                AcceptedPublisherAmendmentUrl = terms.Acceptance?.PublisherAmendmentUrl,
+                AcceptedPublisherAmendmentVersion = terms.Acceptance?.PublisherAmendmentVersion,
+            },
         };
 
         // Step 2: region. ALWAYS query Function1 -- it is the authority for a tenant's region; we
@@ -204,7 +263,15 @@ public class SetupController : BaseController
         // and marked complete on every load, which self-heals any stale or incomplete row. The
         // stored region is used only as a fallback to remember a MANUAL selection that Function1
         // cannot detect; if there's neither a detection nor a prior selection, we show the picker.
-        if (tenantId != Guid.Empty)
+        //
+        // Terms gate: with no region stored yet, don't even ask Function1 -- a detected region
+        // would be auto-saved, and nothing may be actioned before the terms are accepted. A region
+        // that IS already stored (e.g. carried over at activation) is still shown as saved.
+        if (termsBlocking && consent?.AzureRegion == null)
+        {
+            vm.Step2 = StepState.Locked;
+        }
+        else if (tenantId != Guid.Empty)
         {
             var lookup = await this.regionService.GetTenantRegionAsync(tenantId, ct).ConfigureAwait(false);
             // A positively detected region is used as-is, even if it isn't in the customer-facing
@@ -372,7 +439,79 @@ public class SetupController : BaseController
                 : $"We've brought the {sites.Count} sites from your previous subscription across. Their permissions need granting again -- click Grant access on each to restore them.";
         }
 
+        // Terms gate: anything not already done (or in flight) is Locked until the terms are
+        // accepted. Completed steps stay Complete -- an existing tenant is never shown as regressed.
+        if (termsBlocking)
+        {
+            vm.Step2 = LockUnlessDone(vm.Step2);
+            vm.Step3 = LockUnlessDone(vm.Step3);
+            vm.Step4 = LockUnlessDone(vm.Step4);
+            vm.Step5 = LockUnlessDone(vm.Step5);
+        }
+
         return vm;
+    }
+
+    private static StepState LockUnlessDone(StepState state) =>
+        state == StepState.Complete || state == StepState.InProgress ? state : StepState.Locked;
+
+    [HttpPost("/Setup/{subscriptionId:guid}/Terms")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Terms(Guid subscriptionId, bool microsoftContractAccepted, bool publisherAmendmentAccepted, CancellationToken ct)
+    {
+        var result = this.TermsCore(subscriptionId, microsoftContractAccepted, publisherAmendmentAccepted);
+        return await this.FinishInlineAsync(subscriptionId, result, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Records the customer's agreement to the Microsoft Standard Contract and the publisher
+    /// amendment. Both boxes must be ticked (the browser enforces this via <c>required</c>; the
+    /// service enforces it regardless). Who / when / which document versions are persisted on an
+    /// append-only row, audit-logged against the subscription, and confirmed by email.
+    /// </summary>
+    private IActionResult TermsCore(Guid subscriptionId, bool microsoftContractAccepted, bool publisherAmendmentAccepted)
+    {
+        if (!this.User.Identity.IsAuthenticated)
+        {
+            return this.RedirectToAction("Index", "Home");
+        }
+
+        if (!this.TryAuthorizeSetup(subscriptionId, out _))
+        {
+            return this.SetupAccessDenied();
+        }
+
+        // Behind App Service the socket peer is the front end; the client is in X-Forwarded-For.
+        var forwardedFor = this.Request.Headers["X-Forwarded-For"].ToString();
+        var ip = string.IsNullOrWhiteSpace(forwardedFor)
+            ? this.HttpContext.Connection.RemoteIpAddress?.ToString()
+            : forwardedFor.Split(',')[0].Trim();
+
+        var result = this.termsService.Record(subscriptionId, new TermsAcceptanceRequest
+        {
+            MicrosoftContractAccepted = microsoftContractAccepted,
+            PublisherAmendmentAccepted = publisherAmendmentAccepted,
+            AcceptedByUpn = this.CurrentUserEmailAddress,
+            AcceptedByObjectId = this.CurrentUserObjectId,
+            AcceptedByDisplayName = this.CurrentUserName,
+            IpAddress = ip,
+            UserAgent = this.Request.Headers.UserAgent.ToString(),
+            Source = "Setup",
+        });
+
+        if (result.Success)
+        {
+            this.logger.Info(HttpUtility.HtmlEncode(
+                $"Terms accepted for subscription {subscriptionId} by {this.CurrentUserEmailAddress}"));
+            this.TempData["FlashMessage"] = "Thank you. Your agreement has been recorded and a confirmation email is on its way.";
+        }
+        else
+        {
+            this.TempData["FlashMessage"] = result.Error;
+            this.TempData["FlashIsError"] = true;
+        }
+
+        return this.RedirectToAction(nameof(Index), new { subscriptionId });
     }
 
     /// <summary>
@@ -459,6 +598,11 @@ public class SetupController : BaseController
             return this.SetupAccessDenied();
         }
 
+        if (this.TermsGateBlocks(subscriptionId, out var termsBlocked))
+        {
+            return termsBlocked;
+        }
+
         if (string.IsNullOrWhiteSpace(azureRegion))
         {
             this.TempData["FlashMessage"] = "Please choose a region.";
@@ -526,6 +670,11 @@ public class SetupController : BaseController
         if (!this.TryAuthorizeSetup(subscriptionId, out var subscription))
         {
             return this.SetupAccessDenied();
+        }
+
+        if (this.TermsGateBlocks(subscriptionId, out var termsBlocked))
+        {
+            return termsBlocked;
         }
 
         // Remember whether the flow began in the subscriptions-list accordion so the callback can
@@ -641,6 +790,11 @@ public class SetupController : BaseController
             return this.SetupAccessDenied();
         }
 
+        if (this.TermsGateBlocks(subscriptionId, out var termsBlocked))
+        {
+            return termsBlocked;
+        }
+
         var toList = string.Equals(returnTo, "list", StringComparison.OrdinalIgnoreCase);
         if (toList)
         {
@@ -735,8 +889,11 @@ public class SetupController : BaseController
 
         var consent = this.consentRepo.GetByAmpSubscriptionId(subscriptionId);
         var sites = this.siteRepo.ListBySubscription(subscriptionId);
+        var terms = this.termsService.GetStatus(subscriptionId);
         return this.Json(new
         {
+            termsRequired = terms.Required,
+            termsAccepted = terms.Accepted,
             regionSelected = consent?.AzureRegion != null,
             regionFanOutComplete = consent?.TenantRegionsFanOutCompleteUtc.HasValue ?? false,
             // Non-null only when the one-shot fan-out failed and hasn't since completed -- lets the poller
@@ -808,6 +965,11 @@ public class SetupController : BaseController
         if (!this.TryAuthorizeSetup(subscriptionId, out _))
         {
             return this.SetupAccessDenied();
+        }
+
+        if (this.TermsGateBlocks(subscriptionId, out var termsBlocked))
+        {
+            return termsBlocked;
         }
 
         if (string.IsNullOrWhiteSpace(sharePointSiteUrl))
@@ -943,6 +1105,11 @@ public class SetupController : BaseController
             return this.SetupAccessDenied();
         }
 
+        if (this.TermsGateBlocks(subscriptionId, out var termsBlocked))
+        {
+            return termsBlocked;
+        }
+
         var site = this.siteRepo.Get(siteId);
         if (site == null || site.AmpSubscriptionId != subscriptionId)
         {
@@ -1076,6 +1243,11 @@ public class SetupController : BaseController
         if (!this.TryAuthorizeSetup(subscriptionId, out _))
         {
             return this.SetupAccessDenied();
+        }
+
+        if (this.TermsGateBlocks(subscriptionId, out var termsBlocked))
+        {
+            return termsBlocked;
         }
 
         var site = this.siteRepo.Get(siteId);

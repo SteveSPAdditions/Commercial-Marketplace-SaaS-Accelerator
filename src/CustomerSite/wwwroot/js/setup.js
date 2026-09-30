@@ -181,3 +181,15 @@ document.addEventListener('submit', function (e) {
         if (ok) { form.submit(); }
     });
 });
+
+// ---- Terms gate: the Accept button stays disabled until both boxes are ticked ----
+// Delegated so it also works for checklist HTML that is swapped in via fetch().
+document.addEventListener('change', function (e) {
+    var form = e.target && e.target.closest ? e.target.closest('.setup-terms-form') : null;
+    if (!form) return;
+    var boxes = form.querySelectorAll('input[type="checkbox"]');
+    var all = true;
+    for (var i = 0; i < boxes.length; i++) { if (!boxes[i].checked) { all = false; break; } }
+    var btn = form.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = !all;
+});

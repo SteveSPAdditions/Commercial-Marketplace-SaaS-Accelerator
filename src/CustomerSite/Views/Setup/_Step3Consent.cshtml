@@ -31,7 +31,7 @@
 
         @if (Model.Step3 == Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Locked)
         {
-            <p class="setup-step__meta">Available after region selection.</p>
+            <p class="setup-step__meta">@(Model.TermsBlocking ? "Available after you accept the terms." : "Available after region selection.")</p>
         }
         else if (Model.Consent != null && Model.Consent.Granted)
         {

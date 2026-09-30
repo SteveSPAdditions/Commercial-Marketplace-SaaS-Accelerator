@@ -24,11 +24,23 @@ public class SetupViewModel
     public Guid TenantId { get; set; }
 
     public StepState Step1 { get; set; } = StepState.Complete;
+
+    /// <summary>
+    /// Terms gate (Microsoft Standard Contract + publisher amendment). Sits between Step 1 and the
+    /// region step; while it is not Complete every later step that isn't already done is Locked and
+    /// every mutating Setup action refuses. Not rendered when <see cref="TermsStepViewModel.Required"/> is false.
+    /// </summary>
+    public StepState StepTerms { get; set; }
+
+    /// <summary>True while the terms gate is blocking the rest of the checklist.</summary>
+    public bool TermsBlocking { get; set; }
+
     public StepState Step2 { get; set; }
     public StepState Step3 { get; set; }
     public StepState Step4 { get; set; }
     public StepState Step5 { get; set; }
 
+    public TermsStepViewModel Terms { get; set; }
     public RegionPickerViewModel RegionPicker { get; set; }
     public ConsentStepViewModel Consent { get; set; }
     public ConsentStepViewModel TeamsActivity { get; set; }
@@ -36,6 +48,28 @@ public class SetupViewModel
 
     public string FlashMessage { get; set; }
     public bool FlashIsError { get; set; }
+}
+
+public class TermsStepViewModel
+{
+    public bool Required { get; set; }
+    public bool Accepted { get; set; }
+
+    /// <summary>Gate on, not yet accepted, and a document URL is blank: the step cannot be actioned.</summary>
+    public bool Misconfigured { get; set; }
+
+    /// <summary>Documents currently configured (what an un-accepted subscription is shown).</summary>
+    public TermsDocument MicrosoftContract { get; set; }
+    public TermsDocument PublisherAmendment { get; set; }
+
+    /// <summary>The recorded acceptance (what an accepted subscription is shown).</summary>
+    public DateTime? AcceptedUtc { get; set; }
+    public string AcceptedByUpn { get; set; }
+    public string AcceptedMicrosoftContractUrl { get; set; }
+    public string AcceptedMicrosoftContractVersion { get; set; }
+    public string AcceptedPublisherAmendmentTitle { get; set; }
+    public string AcceptedPublisherAmendmentUrl { get; set; }
+    public string AcceptedPublisherAmendmentVersion { get; set; }
 }
 
 public class RegionPickerViewModel

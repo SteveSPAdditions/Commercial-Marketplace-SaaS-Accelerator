@@ -173,6 +173,50 @@
 
 .setup-step__hint a { color: #0078d4; }
 
+/* ---- Terms gate (checkbox cards) ---- */
+.setup-terms-form {
+    margin-top: 1rem;
+}
+
+.setup-terms-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 0.7rem 0.85rem;
+    margin-bottom: 0.5rem;
+    border: 1px solid #c8c6c4;
+    border-radius: 2px;
+    cursor: pointer;
+    background: #ffffff;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.setup-terms-option:hover {
+    border-color: #0078d4;
+    background: #eff6fc;
+}
+
+.setup-terms-option:has(input:checked) {
+    border-color: #0078d4;
+    box-shadow: inset 0 0 0 1px #0078d4;
+    background: #eff6fc;
+}
+
+.setup-terms-option input[type="checkbox"] {
+    margin: 0.2rem 0 0 0;
+    flex: 0 0 auto;
+    accent-color: #0078d4;
+}
+
+.setup-terms-option a { color: #0078d4; }
+
+.setup-container .cm-button-default[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 /* ---- Region picker (Fluent card radios) ---- */
 .setup-region-form {
     margin-top: 1rem;

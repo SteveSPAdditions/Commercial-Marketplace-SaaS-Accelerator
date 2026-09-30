@@ -118,6 +118,11 @@ public class HomeController : BaseController
     private readonly ISubscriptionTenantConsentRepository subscriptionTenantConsentRepository;
 
     /// <summary>
+    /// The terms-acceptance gate (read-only here: shows who accepted the Marketplace terms and when).
+    /// </summary>
+    private readonly ITermsAcceptanceService termsAcceptanceService;
+
+    /// <summary>
     /// Read-only view of the UsageLedger written by the external metering pipeline.
     /// </summary>
     private readonly IUsageLedgerReadRepository usageLedgerReadRepository;
@@ -172,9 +177,11 @@ public class HomeController : BaseController
         ISubscriptionSignalService subscriptionSignalService,
         ISubscriptionTenantConsentRepository subscriptionTenantConsentRepository,
         IUsageLedgerReadRepository usageLedgerReadRepository,
-        ISetupCarryOverService setupCarryOverService) : base(applicationConfigRepository, appVersionService)
+        ISetupCarryOverService setupCarryOverService,
+        ITermsAcceptanceService termsAcceptanceService) : base(applicationConfigRepository, appVersionService)
     {
         this.subscriptionTenantConsentRepository = subscriptionTenantConsentRepository;
+        this.termsAcceptanceService = termsAcceptanceService;
         this.usageLedgerReadRepository = usageLedgerReadRepository;
         this.billingApiService = billingApiService;
         this.subscriptionRepo = subscriptionRepo;
@@ -407,6 +414,11 @@ public class HomeController : BaseController
                 oldValue.PlanId, this.saaSApiClientConfiguration.PublicPlanIds);
             subscriptionDetail.MeteredUserThreshold = this.subscriptionTenantConsentRepository
                 .GetByAmpSubscriptionId(subscriptionId)?.MeteredUserThreshold;
+
+            // Terms gate: who accepted the Marketplace terms + amendment on the customer portal, and when.
+            var terms = this.termsAcceptanceService.GetStatus(subscriptionId);
+            subscriptionDetail.TermsAcceptanceRequired = terms.Required;
+            subscriptionDetail.TermsAcceptance = terms.Acceptance;
 
             // Ledger rows for the metered-usage section; degrades to empty if the
             // pipeline has not created the table yet.

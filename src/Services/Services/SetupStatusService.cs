@@ -14,20 +14,24 @@ public class SetupStatusService : ISetupStatusService
 {
     private readonly ISubscriptionTenantConsentRepository consentRepo;
     private readonly ISubscriptionSiteRepository siteRepo;
+    private readonly ITermsAcceptanceService termsService;
 
     public SetupStatusService(
         ISubscriptionTenantConsentRepository consentRepo,
-        ISubscriptionSiteRepository siteRepo)
+        ISubscriptionSiteRepository siteRepo,
+        ITermsAcceptanceService termsService)
     {
         this.consentRepo = consentRepo;
         this.siteRepo = siteRepo;
+        this.termsService = termsService;
     }
 
     public SetupStatusSummary GetStatus(Guid ampSubscriptionId)
     {
         var consent = this.consentRepo.GetByAmpSubscriptionId(ampSubscriptionId);
         var sites = this.siteRepo.ListBySubscription(ampSubscriptionId).ToList();
-        return Build(ampSubscriptionId, consent, sites);
+        var terms = this.termsService.GetStatus(ampSubscriptionId);
+        return Build(ampSubscriptionId, consent, sites, terms);
     }
 
     public IDictionary<Guid, SetupStatusSummary> GetStatuses(IEnumerable<Guid> ampSubscriptionIds)
@@ -48,8 +52,12 @@ public class SetupStatusService : ISetupStatusService
     private static SetupStatusSummary Build(
         Guid ampSubscriptionId,
         DataAccess.Entities.SubscriptionTenantConsent consent,
-        IReadOnlyCollection<DataAccess.Entities.SubscriptionSite> sites)
+        IReadOnlyCollection<DataAccess.Entities.SubscriptionSite> sites,
+        TermsAcceptanceStatus terms)
     {
+        var termsRequired = terms?.Required ?? true;
+        var termsAccepted = terms?.Accepted ?? false;
+
         var regionSelected = consent?.AzureRegion != null;
         var regionFanOut = consent?.TenantRegionsFanOutCompleteUtc.HasValue == true;
         var consented = consent?.RuntimeAppConsentedUtc.HasValue == true;
@@ -64,6 +72,7 @@ public class SetupStatusService : ISetupStatusService
 
         // Step 1 (subscription active) is implicit when this is called.
         var completed = 1
+            + (termsRequired && termsAccepted ? 1 : 0)
             + (regionSelected && regionFanOut ? 1 : 0)
             + (consented ? 1 : 0)
             + (sitesComplete ? 1 : 0)
@@ -72,6 +81,8 @@ public class SetupStatusService : ISetupStatusService
         return new SetupStatusSummary
         {
             AmpSubscriptionId = ampSubscriptionId,
+            TermsRequired = termsRequired,
+            TermsAccepted = termsAccepted,
             RegionSelected = regionSelected,
             RegionFanOutComplete = regionFanOut,
             TenantConsented = consented,

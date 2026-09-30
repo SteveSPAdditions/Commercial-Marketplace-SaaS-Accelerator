@@ -24,4 +24,9 @@ public enum SubscriptionLogAttributes
     /// The deployment
     /// </summary>
     Deployment = 4,
+
+    /// <summary>
+    /// Marketplace terms + publisher amendment accepted on the customer portal (Setup).
+    /// </summary>
+    TermsAccepted = 5,
 }

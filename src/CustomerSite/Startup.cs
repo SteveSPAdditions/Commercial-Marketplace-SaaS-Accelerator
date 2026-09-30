@@ -303,6 +303,8 @@ public class Startup
         services.AddScoped<IWebNotificationService, WebNotificationService>();
         services.AddScoped<ISubscriptionTenantConsentRepository, SubscriptionTenantConsentRepository>();
         services.AddScoped<ISubscriptionSiteRepository, SubscriptionSiteRepository>();
+        services.AddScoped<ISubscriptionTermsAcceptanceRepository, SubscriptionTermsAcceptanceRepository>();
+        services.AddScoped<ITermsAcceptanceService, TermsAcceptanceService>();
         services.AddScoped<INotificationOutboxRepository, NotificationOutboxRepository>();
         services.AddScoped<IWebhookOperationLogRepository, WebhookOperationLogRepository>();
         services.AddScoped<IWebhookCaptureRepository, WebhookCaptureRepository>();

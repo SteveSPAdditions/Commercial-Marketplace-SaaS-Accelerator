@@ -26,6 +26,10 @@
 
 <ol class="setup-checklist" data-subscription-id="@Model.AmpSubscriptionId">
     @await Html.PartialAsync("_Step1Active", Model)
+    @if (Model.Terms == null || Model.Terms.Required)
+    {
+        @await Html.PartialAsync("_StepTerms", Model)
+    }
     @await Html.PartialAsync("_Step2Region", Model)
     @await Html.PartialAsync("_Step3Consent", Model)
     @await Html.PartialAsync("_Step4Sites", Model)

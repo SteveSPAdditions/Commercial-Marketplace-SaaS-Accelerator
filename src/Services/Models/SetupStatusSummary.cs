@@ -13,6 +13,12 @@ public class SetupStatusSummary
 {
     public Guid AmpSubscriptionId { get; set; }
 
+    /// <summary>The terms gate is switched on (TermsAcceptanceRequired). Adds a step to the checklist.</summary>
+    public bool TermsRequired { get; set; }
+
+    /// <summary>The Marketplace terms + publisher amendment have been accepted for this subscription.</summary>
+    public bool TermsAccepted { get; set; }
+
     /// <summary>Region row exists with a non-null AzureRegion.</summary>
     public bool RegionSelected { get; set; }
 
@@ -28,10 +34,11 @@ public class SetupStatusSummary
     /// <summary>At least one SharePoint site has been enrolled.</summary>
     public bool HasSites { get; set; }
 
-    /// <summary>1..5 — Step 1 is always counted complete when this summary is produced.</summary>
+    /// <summary>1..TotalSteps — Step 1 is always counted complete when this summary is produced.</summary>
     public int CompletedSteps { get; set; }
 
-    public int TotalSteps => 5;
+    /// <summary>Five provisioning steps, plus the terms step when the gate is on.</summary>
+    public int TotalSteps => this.TermsRequired ? 6 : 5;
 
     public bool IsComplete => this.CompletedSteps >= this.TotalSteps;
 

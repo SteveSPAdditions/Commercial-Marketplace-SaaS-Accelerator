@@ -1,0 +1,90 @@
+@model Marketplace.SaaS.Accelerator.CustomerSite.Models.SetupViewModel
+@{
+    var terms = Model.Terms;
+    var stateClass = Model.StepTerms switch
+    {
+        Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Complete => "state-complete",
+        Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Failed => "state-failed",
+        Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.NotStarted => "state-notstarted",
+        _ => "state-locked"
+    };
+    string VersionLabel(string v) => string.IsNullOrWhiteSpace(v) ? "" : $" (version {v})";
+}
+
+<li class="setup-step @stateClass" data-step="terms">
+    <div class="setup-step__marker">
+        @if (Model.StepTerms == Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Complete)
+        {
+            <i class="fa fa-check-circle"></i>
+        }
+        else if (Model.StepTerms == Marketplace.SaaS.Accelerator.CustomerSite.Models.StepState.Failed)
+        {
+            <i class="fa fa-exclamation-circle"></i>
+        }
+        else
+        {
+            <i class="fa fa-circle-o"></i>
+        }
+    </div>
+    <div class="setup-step__body">
+        <h3 class="setup-step__title">Agree to the terms</h3>
+
+        @if (terms == null)
+        {
+            <p class="setup-step__meta">Loading&hellip;</p>
+        }
+        else if (terms.Accepted)
+        {
+            <p class="setup-step__meta">
+                Accepted by @terms.AcceptedByUpn
+                @if (terms.AcceptedUtc.HasValue)
+                {
+                    <text> on @terms.AcceptedUtc.Value.ToString("yyyy-MM-dd")</text>
+                }
+            </p>
+            <p class="setup-step__hint">
+                You agreed to the
+                <a href="@terms.AcceptedMicrosoftContractUrl" target="_blank" rel="noopener">Microsoft Standard Contract@(VersionLabel(terms.AcceptedMicrosoftContractVersion))</a>
+                and the
+                <a href="@terms.AcceptedPublisherAmendmentUrl" target="_blank" rel="noopener">@terms.AcceptedPublisherAmendmentTitle@(VersionLabel(terms.AcceptedPublisherAmendmentVersion))</a>.
+            </p>
+        }
+        else if (terms.Misconfigured)
+        {
+            <p class="setup-step__hint setup-step__hint--warn">
+                <i class="fa fa-exclamation-triangle"></i>
+                The terms documents have not been configured on this portal, so setup cannot continue yet. Please contact support.
+            </p>
+        }
+        else
+        {
+            <p class="setup-step__meta">
+                Your Microsoft Marketplace purchase is governed by the Microsoft Standard Contract together with
+                our amendment to it. The amendment is only available as a download in the Marketplace, so
+                please read both documents here and confirm your agreement before setup can begin.
+            </p>
+            <form method="post" action="/Setup/@Model.AmpSubscriptionId/Terms" class="setup-terms-form">
+                @Html.AntiForgeryToken()
+                <label class="setup-terms-option">
+                    <input type="checkbox" name="microsoftContractAccepted" value="true" required />
+                    <span>
+                        I have read and agree to the
+                        <a href="@terms.MicrosoftContract.Url" target="_blank" rel="noopener">@terms.MicrosoftContract.Title</a>@(VersionLabel(terms.MicrosoftContract.Version)).
+                    </span>
+                </label>
+                <label class="setup-terms-option">
+                    <input type="checkbox" name="publisherAmendmentAccepted" value="true" required />
+                    <span>
+                        I have read and agree to the
+                        <a href="@terms.PublisherAmendment.Url" target="_blank" rel="noopener">@terms.PublisherAmendment.Title</a>@(VersionLabel(terms.PublisherAmendment.Version)).
+                    </span>
+                </label>
+                <p class="setup-step__hint">
+                    Your name, the date and time, and the document versions shown above will be recorded with
+                    this subscription, and a confirmation will be emailed to you.
+                </p>
+                <button type="submit" class="cm-button-default mt20" disabled>Accept and continue</button>
+            </form>
+        }
+    </div>
+</li>

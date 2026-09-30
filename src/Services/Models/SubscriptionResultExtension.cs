@@ -86,4 +86,16 @@ public class SubscriptionResultExtension : SubscriptionResult
     /// (SubscriptionTenantConsent), if any. Null for public plans and uncaptured rows.
     /// </summary>
     public int? MeteredUserThreshold { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the customer-portal terms gate is switched on
+    /// (ApplicationConfiguration TermsAcceptanceRequired).
+    /// </summary>
+    public bool TermsAcceptanceRequired { get; set; }
+
+    /// <summary>
+    /// Gets or sets the recorded acceptance of the Microsoft Standard Contract + publisher
+    /// amendment for this subscription (SubscriptionTermsAcceptance), or null if not yet accepted.
+    /// </summary>
+    public DataAccess.Entities.SubscriptionTermsAcceptance TermsAcceptance { get; set; }
 }
