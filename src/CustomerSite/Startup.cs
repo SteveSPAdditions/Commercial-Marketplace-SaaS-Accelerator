@@ -3,6 +3,7 @@
 
 using Azure.Identity;
 using Marketplace.SaaS.Accelerator.CustomerSite.Controllers;
+using Marketplace.SaaS.Accelerator.CustomerSite.Filters;
 using Marketplace.SaaS.Accelerator.CustomerSite.Controllers.Api;
 using Marketplace.SaaS.Accelerator.CustomerSite.HostedServices;
 using Marketplace.SaaS.Accelerator.CustomerSite.WebHook;
@@ -249,6 +250,8 @@ public class Startup
         services.AddMvc(option => {
             option.EnableEndpointRouting = false;
             option.Filters.Add(new AutoValidateAntiforgeryTokenAttribute());
+            // A failed antiforgery check becomes a redirect-with-message instead of a bare 400 (see the filter).
+            option.Filters.Add<AntiforgeryFailureRedirectFilter>();
         });
     }
 

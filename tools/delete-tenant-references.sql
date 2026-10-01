@@ -10,6 +10,7 @@
       A subscription is "the tenant's" if ANY of these hold:
         - Subscriptions.PurchaserTenantId        = @TenantId
         - SubscriptionTenantConsent.TenantId     = @TenantId
+        - SubscriptionTermsAcceptance.TenantId   = @TenantId
         - UsageLedger.TenantId                   = @TenantId
         - WebhookCapture.PayloadJson  contains the tenant GUID text
         - NotificationOutbox.EventJson contains the tenant GUID text
@@ -30,6 +31,7 @@
      WebJobSubscriptionStatus        (guid SubscriptionId = AMPSubscriptionId)
      SubscriptionSite                (guid AmpSubscriptionId)
      SubscriptionTenantConsent       (guid AmpSubscriptionId  OR TenantId)
+     SubscriptionTermsAcceptance     (guid AmpSubscriptionId  OR TenantId)
      NotificationOutbox              (guid AmpSubscriptionId  OR EventJson text)
      WebhookOperationLog             (guid SubscriptionId)
      WebhookCapture                  (guid SubscriptionId     OR PayloadJson text)
@@ -57,7 +59,7 @@ SET NOCOUNT ON;
 SET XACT_ABORT ON;
 
 DECLARE @TenantId              uniqueidentifier = '71150C86-EF73-422D-8FDA-43879C95E0B4';
-DECLARE @DryRun                bit              = 0;     -- 1 = report only, 0 = delete
+DECLARE @DryRun                bit              = 1;     -- 1 = report only, 0 = delete
 DECLARE @Confirm               varchar(30)      = 'xYES-DELETE-TENANT';    -- set to 'YES-DELETE-TENANT' to delete
 DECLARE @IncludeApplicationLog bit              = 1;     -- 0 = leave ApplicationLog alone
 
@@ -94,6 +96,13 @@ SELECT DISTINCT c.AmpSubscriptionId, 'SubscriptionTenantConsent.TenantId'
 FROM dbo.SubscriptionTenantConsent c
 WHERE c.TenantId = @TenantId
   AND NOT EXISTS (SELECT 1 FROM #Subs x WHERE x.AmpSubscriptionId = c.AmpSubscriptionId);
+
+IF OBJECT_ID('dbo.SubscriptionTermsAcceptance','U') IS NOT NULL
+INSERT INTO #Subs (AmpSubscriptionId, Source)
+SELECT DISTINCT t.AmpSubscriptionId, 'SubscriptionTermsAcceptance.TenantId'
+FROM dbo.SubscriptionTermsAcceptance t
+WHERE t.TenantId = @TenantId
+  AND NOT EXISTS (SELECT 1 FROM #Subs x WHERE x.AmpSubscriptionId = t.AmpSubscriptionId);
 
 IF OBJECT_ID('dbo.UsageLedger','U') IS NOT NULL
 INSERT INTO #Subs (AmpSubscriptionId, Source)
@@ -169,6 +178,12 @@ INSERT INTO #Preview ([Table], MatchedRows)
 SELECT 'SubscriptionTenantConsent', COUNT(*) FROM dbo.SubscriptionTenantConsent c
 WHERE c.TenantId = @TenantId
    OR c.AmpSubscriptionId IN (SELECT AmpSubscriptionId FROM #Subs);
+
+IF OBJECT_ID('dbo.SubscriptionTermsAcceptance','U') IS NOT NULL
+INSERT INTO #Preview ([Table], MatchedRows)
+SELECT 'SubscriptionTermsAcceptance', COUNT(*) FROM dbo.SubscriptionTermsAcceptance t
+WHERE t.TenantId = @TenantId
+   OR t.AmpSubscriptionId IN (SELECT AmpSubscriptionId FROM #Subs);
 
 IF OBJECT_ID('dbo.NotificationOutbox','U') IS NOT NULL
 INSERT INTO #Preview ([Table], MatchedRows)
@@ -287,6 +302,16 @@ BEGIN TRAN;
         PRINT 'SubscriptionTenantConsent      : ' + CAST(@@ROWCOUNT AS varchar(10));
     END
 
+    -- Terms acceptance is append-only legal evidence. Removing it is only appropriate for a
+    -- TEST tenant being torn down; it goes with the subscription rows it belongs to.
+    IF OBJECT_ID('dbo.SubscriptionTermsAcceptance','U') IS NOT NULL
+    BEGIN
+        DELETE t FROM dbo.SubscriptionTermsAcceptance t
+        WHERE t.TenantId = @TenantId
+           OR t.AmpSubscriptionId IN (SELECT AmpSubscriptionId FROM #Subs);
+        PRINT 'SubscriptionTermsAcceptance    : ' + CAST(@@ROWCOUNT AS varchar(10));
+    END
+
     IF OBJECT_ID('dbo.NotificationOutbox','U') IS NOT NULL
     BEGIN
         DELETE o FROM dbo.NotificationOutbox o
@@ -343,6 +368,8 @@ UNION ALL SELECT 'Post-check', 'Subscriptions by resolved id', COUNT(*)
 FROM dbo.Subscriptions WHERE AMPSubscriptionId IN (SELECT AmpSubscriptionId FROM #Subs)
 UNION ALL SELECT 'Post-check', 'SubscriptionTenantConsent.TenantId', COUNT(*)
 FROM dbo.SubscriptionTenantConsent WHERE TenantId = @TenantId
+UNION ALL SELECT 'Post-check', 'SubscriptionTermsAcceptance.TenantId', COUNT(*)
+FROM dbo.SubscriptionTermsAcceptance WHERE TenantId = @TenantId
 UNION ALL SELECT 'Post-check', 'UsageLedger.TenantId', COUNT(*)
 FROM dbo.UsageLedger WHERE TenantId = @TenantId
 UNION ALL SELECT 'Post-check', 'WebhookCapture.PayloadJson text', COUNT(*)

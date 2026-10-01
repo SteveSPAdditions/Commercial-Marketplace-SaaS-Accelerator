@@ -41,6 +41,7 @@ BEGIN TRAN;
 
     -- RAU signalling + consent/region/fan-out state (keyed by AmpSubscriptionId).
     IF OBJECT_ID('dbo.SubscriptionTenantConsent','U')  IS NOT NULL DELETE FROM dbo.SubscriptionTenantConsent;
+    IF OBJECT_ID('dbo.SubscriptionTermsAcceptance','U') IS NOT NULL DELETE FROM dbo.SubscriptionTermsAcceptance;
     IF OBJECT_ID('dbo.NotificationOutbox','U')         IS NOT NULL DELETE FROM dbo.NotificationOutbox;
     IF OBJECT_ID('dbo.WebhookOperationLog','U')        IS NOT NULL DELETE FROM dbo.WebhookOperationLog;
     IF OBJECT_ID('dbo.WebhookCapture','U')             IS NOT NULL DELETE FROM dbo.WebhookCapture;
