@@ -77,12 +77,23 @@ public class SubscriptionSignalService : ISubscriptionSignalService
             // receiver treats null as "leave unchanged".
             var consent = consentRepo.GetByAmpSubscriptionId(ampSubscriptionId);
 
+            // Home-region routing hint. The Accelerator posts every signal to ONE receiver (USA),
+            // which forwards to the tenant's home region after looking the tenant up in ITS OWN
+            // master's TenantRegions. The TenantRegionFanOut is forwarded to the home region first,
+            // and that region's fan-out only writes masters inside its dev/prod isolation scope -- so
+            // a dev-homed (LH/DEV) tenant never gets a row in the USA master, USA cannot resolve its
+            // home region, and every status signal for it 503s locally ("no TenantRegions row in the
+            // local master") until the outbox dead-letters. The region the customer picked in Setup is
+            // on the consent row; carrying it lets the receiver route when its local lookup misses.
+            // Null when no region has been selected yet; the receiver then falls back to its own
+            // lookups exactly as before.
             var now = DateTime.UtcNow;
             var payload = new
             {
                 eventType,
                 saasSubscriptionId = ampSubscriptionId,
                 assignedTenantId = subscription.PurchaserTenantId ?? Guid.Empty,
+                azureRegion = consent?.AzureRegion,
                 planId = subscription.AmpplanId,
                 subscriptionStatus = SubscriptionStatusNormalizer.ToMarketplaceStatus(subscription.SubscriptionStatus),
                 modifiedUtc = now,

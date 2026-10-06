@@ -106,6 +106,25 @@ the existing switch, which already returns the correct onboarding-transient 503 
 resolvable…"). Region is set-once (`RegisterInRegionAsync` never changes `AzureRegion`), so the
 replicated row is safe to route on even when its `SubscriptionId` is stale.
 
+> **Amendment 2026-10-06 — the sender's region hint.** The row is *not* replicated across the dev/prod
+> isolation boundary, and §2.7's claim that LH "registers it everywhere" was wrong:
+> `IsRegionInThisIsolationScope` keeps a dev instance's fan-out inside the dev masters. So a dev-homed
+> tenant never has a row in the USA master, USA could never resolve its status events, and each one
+> 503'd locally ("tenant … resolved from the event's assignedTenantId but has no TenantRegions row in
+> the local master") until the outbox dead-lettered — seen 2026-10-04 for xjyg4 (`71150c86-…`) on
+> `Activated` for subscription `42a3bca8-…`. Fix on both sides, no schema change:
+>
+> - **Sender:** `SubscriptionSignalService` puts `azureRegion` (= `SubscriptionTenantConsent.AzureRegion`,
+>   the Setup-selected region, `null` until selected) on every pushed-status payload, next to
+>   `assignedTenantId`.
+> - **Receiver:** `ResolveHomeRegionCore` falls back to `body.AzureRegion` when neither the tenant-id
+>   lookup nor the subscription scan finds a row. A found row always wins (set-once); a lookup *fault*
+>   still returns null so the local path reports it; no hint and no row is unchanged (null → local 503).
+>
+> USA therefore forwards the dev tenant's events to LH/DEV on the hint alone, and the home region applies
+> them against its own master exactly as before. Production tenants are unaffected: their row exists at
+> USA (same isolation scope) and is used first.
+
 ### 2.3 Route decision (pure, tested)
 
 ```csharp

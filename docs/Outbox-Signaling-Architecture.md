@@ -138,10 +138,18 @@ Only one is wired up today. The receiver routes on `eventType` in the body, so a
 | EventType | Producer | Body fields (additional) | Receiver action |
 |---|---|---|---|
 | `TenantRegionFanOut` | `AzureRegionService.SaveRegionAndEnqueueFanOutAsync` | `assignedTenantId`, `azureRegion` | `FanOutSaasTenantRegionAsync` — upsert `TenantRegion` row in every `MasterDb{region}` in **parallel**. Partial failure → 503, no `SaasEventLog` write, sender's outbox retries. Per-region upserts are idempotent (check existing row before update). |
-| `PlanChanged` | `SubscriptionSignalService` (from `WebHookHandler.ChangePlanAsync`) | `assignedTenantId`, `planId`, `subscriptionStatus` | **Pull-nudge (receiver case not yet implemented — Phase 3).** RAU keys on `assignedTenantId`, sets `TenantRegions.SubscriptionId` if null, then re-pulls live plan/status from the Fulfillment API. Until the `case` exists, the receiver returns 202 `recorded-no-action` (dispatcher treats 202 as Delivered). |
-| `Unsubscribed` | `SubscriptionSignalService` (from `WebHookHandler.UnsubscribedAsync`) | `assignedTenantId`, `planId`, `subscriptionStatus` | Pull-nudge (Phase 3), same as above. |
-| `Suspended` | `SubscriptionSignalService` (from `WebHookHandler.SuspendedAsync`) | `assignedTenantId`, `planId`, `subscriptionStatus` | Pull-nudge (Phase 3), same as above. |
-| `Reinstated` | `SubscriptionSignalService` (from `WebHookHandler.ReinstatedAsync`) | `assignedTenantId`, `planId`, `subscriptionStatus` | Pull-nudge (Phase 3), same as above. |
+| `PlanChanged` | `SubscriptionSignalService` (from `WebHookHandler.ChangePlanAsync`) | `assignedTenantId`, `azureRegion`, `planId`, `subscriptionStatus` | **Pull-nudge (receiver case not yet implemented — Phase 3).** RAU keys on `assignedTenantId`, sets `TenantRegions.SubscriptionId` if null, then re-pulls live plan/status from the Fulfillment API. Until the `case` exists, the receiver returns 202 `recorded-no-action` (dispatcher treats 202 as Delivered). |
+| `Unsubscribed` | `SubscriptionSignalService` (from `WebHookHandler.UnsubscribedAsync`) | `assignedTenantId`, `azureRegion`, `planId`, `subscriptionStatus` | Pull-nudge (Phase 3), same as above. |
+| `Suspended` | `SubscriptionSignalService` (from `WebHookHandler.SuspendedAsync`) | `assignedTenantId`, `azureRegion`, `planId`, `subscriptionStatus` | Pull-nudge (Phase 3), same as above. |
+| `Reinstated` | `SubscriptionSignalService` (from `WebHookHandler.ReinstatedAsync`) | `assignedTenantId`, `azureRegion`, `planId`, `subscriptionStatus` | Pull-nudge (Phase 3), same as above. |
+
+`azureRegion` on the status events (added 2026-10-06) is a **routing hint only**: the region the customer
+picked in Setup, read from `SubscriptionTenantConsent.AzureRegion` at enqueue time, `null` until a region
+is selected. The receiver uses it to forward the event to the tenant's home region when its own
+`TenantRegions` lookup misses — which is always the case for a dev-homed (LH/DEV) tenant at the USA
+receiver, because the dev fan-out never writes production masters. See
+[Phase3E-Region-Forwarding-Spec.md §2.2](Phase3E-Region-Forwarding-Spec.md). The home region still
+applies the event against its own master; the hint never overrides a known row.
 
 **Producer notes (subscription events):** `SubscriptionSignalService` runs in the webhook hot path, so it resolves its own scope + `SaasKitContext` via `IServiceScopeFactory` (per the DbContext-concurrency rule) and reads the post-update state for the body. Best-effort (never throws into the handler) and idempotent on `{eventType}|{ampSubscriptionId:N}|{operationId:N}` so a webhook redelivery collapses to one signal. Enqueue is **not** atomic with the state write (separate context) — the daily reconcile is the backstop for the crash window. Keyed on **tenant id**, because RAU is 1 tenant : 1 subscription (unique `TenantRegions.TenantId`) whereas the accelerator is 1 tenant : many; `ampSubscriptionId` rides in the body to disambiguate + anchor.
 

@@ -214,6 +214,54 @@ public class MeteredUserThresholdTest
         Assert.AreEqual(TermStart, doc.RootElement.GetProperty("marketplaceTermStartUtc").GetDateTime());
     }
 
+    [TestMethod]
+    public void SignalCarriesTheSelectedHomeRegionAsARoutingHint()
+    {
+        // The single receiver (USA) forwards status events to the tenant's home region, but a
+        // dev-homed tenant never gets a TenantRegions row in the USA master (dev/prod isolation),
+        // so USA cannot resolve it locally. The region chosen in Setup lives on the consent row and
+        // rides on every status signal so the receiver can route on it when its lookup misses.
+        var consent = new SubscriptionTenantConsent
+        {
+            Id = 1,
+            AmpSubscriptionId = SubscriptionId,
+            TenantId = TenantId,
+            AzureRegion = "LH",
+        };
+        var (service, enqueued) = BuildSignalService(BuildSubscription(), consent);
+
+        service.EnqueueSubscriptionSignal(SubscriptionId, "Activated", Guid.Empty);
+
+        var entry = enqueued();
+        Assert.IsNotNull(entry);
+        using var doc = JsonDocument.Parse(entry.EventJson);
+        Assert.AreEqual("LH", doc.RootElement.GetProperty("azureRegion").GetString());
+    }
+
+    [TestMethod]
+    public void SignalWithoutASelectedRegionCarriesNullHint()
+    {
+        // Before Setup picks a region (or with no consent row at all) the hint is null, never a
+        // guessed region: the receiver then uses its own lookups exactly as before.
+        var consentWithoutRegion = new SubscriptionTenantConsent
+        {
+            Id = 1,
+            AmpSubscriptionId = SubscriptionId,
+            TenantId = TenantId,
+        };
+        foreach (var consent in new[] { consentWithoutRegion, null })
+        {
+            var (service, enqueued) = BuildSignalService(BuildSubscription(), consent);
+
+            service.EnqueueSubscriptionSignal(SubscriptionId, "Suspended", Guid.NewGuid());
+
+            var entry = enqueued();
+            Assert.IsNotNull(entry);
+            using var doc = JsonDocument.Parse(entry.EventJson);
+            Assert.AreEqual(JsonValueKind.Null, doc.RootElement.GetProperty("azureRegion").ValueKind);
+        }
+    }
+
     // ---------------------------------------------------------------------------------------
     // SubscriptionTermRefreshService -- Renew moves MarketplaceTermStartUtc
     // ---------------------------------------------------------------------------------------
