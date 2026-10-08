@@ -18,6 +18,7 @@ using Marketplace.SaaS.Accelerator.Services.StatusHandlers;
 using Marketplace.SaaS.Accelerator.Services.Utilities;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -26,6 +27,14 @@ namespace Marketplace.SaaS.Accelerator.CustomerSite.Controllers;
 
 /// <summary>Home Controller.</summary>
 /// <seealso cref="BaseController"/>
+/// <remarks>
+/// Every action needs a signed-in customer except the landing page and the error page. Without
+/// this, a lapsed sign-in cookie (60 minutes, sliding) on a GET such as ViewSubscription fell
+/// through the <c>IsAuthenticated</c> guard and rendered the landing view with a default model:
+/// an all-zero subscription id, status PendingFulfillmentStart and a Subscribe button. The
+/// challenge now sends the customer to sign in and back to the page they asked for.
+/// </remarks>
+[Authorize]
 public class HomeController : BaseController
 {
     /// <summary>
@@ -222,6 +231,7 @@ public class HomeController : BaseController
     /// <returns>
     /// The <see cref="IActionResult" />.
     /// </returns>
+    [AllowAnonymous]
     public async Task<IActionResult> Index(string token = null)
     {
         try
@@ -667,6 +677,7 @@ public class HomeController : BaseController
     /// <returns>
     /// The <see cref="IActionResult" />.
     /// </returns>
+    [AllowAnonymous]
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
     public IActionResult Error()
     {
