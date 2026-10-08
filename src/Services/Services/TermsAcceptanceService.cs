@@ -261,7 +261,7 @@ public class TermsAcceptanceService : ITermsAcceptanceService
                 Subject = subject,
                 Body = body,
                 ToEmails = acceptance.AcceptedByUpn,
-                CCEmails = template.Cc,
+                CCEmails = WithPurchaserCopy(template.Cc, subscription.PurchaserEmail, acceptance.AcceptedByUpn),
                 BCCEmails = template.Bcc,
                 FromEmail = this.configRepo.GetValueByName("SMTPFromEmail"),
                 Password = this.configRepo.GetValueByName("SMTPPassword"),
@@ -277,6 +277,31 @@ public class TermsAcceptanceService : ITermsAcceptanceService
         {
             this.logger.LogError(ex, "Terms confirmation email failed for {SubscriptionId} (acceptance already recorded).", subscription.AmpsubscriptionId);
         }
+    }
+
+    /// <summary>
+    /// The Marketplace purchaser is copied when someone else in the tenant accepted on their behalf.
+    /// Appended to the template's Cc list; a blank, unmailable or duplicate purchaser adds nothing.
+    /// </summary>
+    private static string WithPurchaserCopy(string templateCc, string purchaserEmail, string acceptedByUpn)
+    {
+        var purchaser = purchaserEmail?.Trim();
+        if (string.IsNullOrEmpty(purchaser)
+            || !purchaser.Contains('@')
+            || string.Equals(purchaser, acceptedByUpn?.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            return templateCc;
+        }
+
+        if (string.IsNullOrWhiteSpace(templateCc))
+        {
+            return purchaser;
+        }
+
+        var alreadyListed = Array.Exists(
+            templateCc.Split(';'),
+            cc => string.Equals(cc.Trim(), purchaser, StringComparison.OrdinalIgnoreCase));
+        return alreadyListed ? templateCc : templateCc.TrimEnd(';', ' ') + ";" + purchaser;
     }
 
     /// <summary>A site-relative document path becomes absolute using CustomerSiteBaseUrl, so it works in an email.</summary>

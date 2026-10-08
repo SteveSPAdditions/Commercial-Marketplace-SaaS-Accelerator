@@ -78,6 +78,19 @@ public class SMTPEmailService : IEmailService
                         }
                     }
 
+                    // CC was never copied onto the message before, so the Cc column on every
+                    // email template (and the purchaser copy on the terms email) was silently dropped.
+                    if (!string.IsNullOrEmpty(emailContent.CCEmails))
+                    {
+                        foreach (string multimailid in emailContent.CCEmails.Split(';'))
+                        {
+                            if (!string.IsNullOrWhiteSpace(multimailid))
+                            {
+                                mail.CC.Add(new MailAddress(multimailid.Trim()));
+                            }
+                        }
+                    }
+
                     if (!string.IsNullOrEmpty(emailContent.BCCEmails))
                     {
                         foreach (string multimailid in emailContent.BCCEmails.Split(';'))

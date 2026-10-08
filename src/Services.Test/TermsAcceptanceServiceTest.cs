@@ -272,6 +272,77 @@ public class TermsAcceptanceServiceTest
     }
 
     [TestMethod]
+    public void Record_CopiesPurchaserWhenSomeoneElseAccepted()
+    {
+        this.SetPurchaserEmail("buyer@contoso.com");
+        this.template.Cc = "sales@publisher.example";
+
+        this.Build().Record(SubscriptionId, FullRequest());
+
+        var mail = this.sentEmails.Single();
+        Assert.AreEqual("admin@contoso.com", mail.ToEmails);
+        Assert.AreEqual("sales@publisher.example;buyer@contoso.com", mail.CCEmails);
+    }
+
+    [TestMethod]
+    public void Record_PurchaserBecomesTheOnlyCcWhenTemplateHasNone()
+    {
+        this.SetPurchaserEmail("buyer@contoso.com");
+        this.template.Cc = null;
+
+        this.Build().Record(SubscriptionId, FullRequest());
+
+        Assert.AreEqual("buyer@contoso.com", this.sentEmails.Single().CCEmails);
+    }
+
+    [TestMethod]
+    public void Record_DoesNotCopyPurchaserWhoIsTheAccepter()
+    {
+        this.SetPurchaserEmail("Admin@Contoso.com");
+        this.template.Cc = "sales@publisher.example";
+
+        this.Build().Record(SubscriptionId, FullRequest());
+
+        Assert.AreEqual("sales@publisher.example", this.sentEmails.Single().CCEmails);
+    }
+
+    [TestMethod]
+    public void Record_DoesNotDuplicatePurchaserAlreadyOnTemplateCc()
+    {
+        this.SetPurchaserEmail("buyer@contoso.com");
+        this.template.Cc = "sales@publisher.example; BUYER@contoso.com";
+
+        this.Build().Record(SubscriptionId, FullRequest());
+
+        Assert.AreEqual("sales@publisher.example; BUYER@contoso.com", this.sentEmails.Single().CCEmails);
+    }
+
+    [TestMethod]
+    public void Record_IgnoresUnmailablePurchaser()
+    {
+        this.SetPurchaserEmail("not-an-address");
+        this.template.Cc = "sales@publisher.example";
+
+        this.Build().Record(SubscriptionId, FullRequest());
+
+        Assert.AreEqual("sales@publisher.example", this.sentEmails.Single().CCEmails);
+    }
+
+    private void SetPurchaserEmail(string purchaserEmail)
+    {
+        this.subscriptionsRepo.Setup(x => x.GetById(SubscriptionId, It.IsAny<bool>()))
+            .Returns(new Subscriptions
+            {
+                Id = 42,
+                AmpsubscriptionId = SubscriptionId,
+                Name = "Contoso RnU",
+                PurchaserTenantId = TenantId,
+                PurchaserEmail = purchaserEmail,
+                SubscriptionStatus = "Subscribed",
+            });
+    }
+
+    [TestMethod]
     public void Record_EmailDisabled_StillRecordsAcceptance()
     {
         this.config[TermsAcceptanceService.EmailEnabledKey] = "false";
