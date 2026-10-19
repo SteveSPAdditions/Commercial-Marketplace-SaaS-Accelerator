@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Reflection;
+using Azure.Core;
 using Azure.Identity;
 using Marketplace.SaaS.Accelerator.DataAccess.Context;
 using Marketplace.SaaS.Accelerator.DataAccess.Contracts;
@@ -41,7 +42,21 @@ class Program
             TenantId = configuration["SaaSApiConfiguration:TenantId"]
         };
 
-        var creds = new ClientSecretCredential(config.TenantId.ToString(), config.ClientId.ToString(), config.ClientSecret);
+        // App-only auth mode: Auth:Mode=Federated exchanges the host's user-assigned managed
+        // identity for a fulfilment-app token (no secret); default (Certificate) is the
+        // pre-existing client secret, byte-for-byte. This job runs inside the admin App Service,
+        // so it sees the same application settings / identity.
+        AppOnlyCredentialFactory.WireUp(
+            key => configuration[key],
+            (message, exception) => Console.WriteLine($"WARN {message} {exception}"));
+        AppOnlyCredentialFactory.AssertStartupPreconditions();
+        Console.WriteLine(AppOnlyCredentialFactory.DescribeMode());
+        TokenCredential creds = AppOnlyCredentialFactory.Mode == AppOnlyAuthMode.Federated
+            ? AppOnlyCredentialFactory.GetFederatedCredential(
+                config.TenantId.ToString(),
+                AppOnlyCredentialFactory.ReadSetting("FulfilmentAppId", new[] { "SaaSApiConfiguration:ClientId" })
+                    ?? config.ClientId.ToString())
+            : new ClientSecretCredential(config.TenantId.ToString(), config.ClientId.ToString(), config.ClientSecret);
         var versionInfo = new AppVersionService(Assembly.GetExecutingAssembly()?.GetName()?.Version);
 
         var services = new ServiceCollection()

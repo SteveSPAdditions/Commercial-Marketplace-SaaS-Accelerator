@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for license information.
 
+using Azure.Core;
 using Azure.Identity;
 using Marketplace.SaaS.Accelerator.CustomerSite.Controllers;
 using Marketplace.SaaS.Accelerator.CustomerSite.Filters;
@@ -118,7 +119,20 @@ public class Startup
             PublicPlanIds = this.Configuration["SaaSApiConfiguration:PublicPlanIds"]
                             ?? SaaSApiClientConfiguration.PublicPlanIdsDefault,
         };
-        var creds = new ClientSecretCredential(config.TenantId.ToString(), config.ClientId.ToString(), config.ClientSecret);
+        // App-only auth mode: Auth:Mode=Federated exchanges this App Service's user-assigned
+        // managed identity for a fulfilment-app token (no secret); default (Certificate) is the
+        // pre-existing client secret, byte-for-byte.
+        AppOnlyCredentialFactory.WireUp(
+            key => this.Configuration[key],
+            (message, exception) => Trace.TraceWarning($"{message} {exception}"));
+        AppOnlyCredentialFactory.AssertStartupPreconditions();
+        Trace.TraceInformation(AppOnlyCredentialFactory.DescribeMode());
+        TokenCredential creds = AppOnlyCredentialFactory.Mode == AppOnlyAuthMode.Federated
+            ? AppOnlyCredentialFactory.GetFederatedCredential(
+                config.TenantId.ToString(),
+                AppOnlyCredentialFactory.ReadSetting("FulfilmentAppId", new[] { "SaaSApiConfiguration:ClientId" })
+                    ?? config.ClientId.ToString())
+            : new ClientSecretCredential(config.TenantId.ToString(), config.ClientId.ToString(), config.ClientSecret);
 
         // Scopes the portal requests at *initial sign-in* -- authentication only. Keep this
         // minimal: anything listed here is injected into the /authorize request and shown on

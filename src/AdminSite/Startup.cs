@@ -4,6 +4,7 @@
 using System;
 using System.Diagnostics;
 using System.Reflection;
+using Azure.Core;
 using Azure.Identity;
 using Marketplace.SaaS.Accelerator.AdminSite.Controllers;
 using Marketplace.SaaS.Accelerator.DataAccess.Context;
@@ -115,7 +116,20 @@ public class Startup
         {
             KnownUsers = this.Configuration["KnownUsers"],
         };
-        var creds = new ClientSecretCredential(config.TenantId.ToString(), config.ClientId.ToString(), config.ClientSecret);
+        // App-only auth mode: Auth:Mode=Federated exchanges this App Service's user-assigned
+        // managed identity for a fulfilment-app token (no secret); default (Certificate) is the
+        // pre-existing client secret, byte-for-byte.
+        AppOnlyCredentialFactory.WireUp(
+            key => this.Configuration[key],
+            (message, exception) => Trace.TraceWarning($"{message} {exception}"));
+        AppOnlyCredentialFactory.AssertStartupPreconditions();
+        Trace.TraceInformation(AppOnlyCredentialFactory.DescribeMode());
+        TokenCredential creds = AppOnlyCredentialFactory.Mode == AppOnlyAuthMode.Federated
+            ? AppOnlyCredentialFactory.GetFederatedCredential(
+                config.TenantId.ToString(),
+                AppOnlyCredentialFactory.ReadSetting("FulfilmentAppId", new[] { "SaaSApiConfiguration:ClientId" })
+                    ?? config.ClientId.ToString())
+            : new ClientSecretCredential(config.TenantId.ToString(), config.ClientId.ToString(), config.ClientSecret);
         var boolMultiTenant = config.IsAdminPortalMultiTenant?.ToLower().Trim() ?? "false";
 
 
