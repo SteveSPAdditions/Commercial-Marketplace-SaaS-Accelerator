@@ -32,7 +32,6 @@ using Microsoft.Identity.Web;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.Marketplace.SaaS;
 using System;
-using System.Diagnostics;
 using System.Net.Http;
 using System.Reflection;
 
@@ -46,6 +45,11 @@ public class Startup
     /// <summary>
     /// Initializes a new instance of the <see cref="Startup"/> class.
     /// </summary>
+    /// <summary>Logger for the app-only auth startup line and the credential factory's warnings;
+    /// assigned in <see cref="Configure"/> once the host's logging pipeline exists.</summary>
+    private Microsoft.Extensions.Logging.ILogger authLogger;
+    private string authModeLine;
+
     public Startup(IConfiguration configuration, IHostEnvironment hostEnvironment)
     {
         this.Configuration = configuration;
@@ -124,14 +128,18 @@ public class Startup
         // pre-existing client secret, byte-for-byte.
         AppOnlyCredentialFactory.WireUp(
             key => this.Configuration[key],
-            (message, exception) => Trace.TraceWarning($"{message} {exception}"));
+            (message, exception) =>
+            {
+                if (this.authLogger != null) this.authLogger.LogWarning(exception, "{Message}", message);
+                else Console.WriteLine($"WARN {message} {exception}");
+            });
         AppOnlyCredentialFactory.AssertStartupPreconditions();
-        Trace.TraceInformation(AppOnlyCredentialFactory.DescribeMode());
+        var fulfilmentAppId =
+            AppOnlyCredentialFactory.ReadSetting("FulfilmentAppId", new[] { "SaaSApiConfiguration:ClientId" })
+            ?? config.ClientId.ToString();
+        this.authModeLine = AppOnlyCredentialFactory.DescribeMode(fulfilmentAppId: fulfilmentAppId);
         TokenCredential creds = AppOnlyCredentialFactory.Mode == AppOnlyAuthMode.Federated
-            ? AppOnlyCredentialFactory.GetFederatedCredential(
-                config.TenantId.ToString(),
-                AppOnlyCredentialFactory.ReadSetting("FulfilmentAppId", new[] { "SaaSApiConfiguration:ClientId" })
-                    ?? config.ClientId.ToString())
+            ? AppOnlyCredentialFactory.GetFederatedCredential(config.TenantId.ToString(), fulfilmentAppId)
             : new ClientSecretCredential(config.TenantId.ToString(), config.ClientId.ToString(), config.ClientSecret);
 
         // Scopes the portal requests at *initial sign-in* -- authentication only. Keep this
@@ -277,6 +285,11 @@ public class Startup
     /// <param name="loggerFactory">The loggerFactory<see cref="ILoggerFactory" />.</param>
     public void Configure(IApplicationBuilder app, IWebHostEnvironment env, ILoggerFactory loggerFactory)
     {
+        // Emitted through the real logging pipeline (console + Application Insights) so the
+        // active auth mode is visible in the App Service log stream.
+        this.authLogger = loggerFactory.CreateLogger("AppOnlyAuth");
+        this.authLogger.LogInformation("{AuthMode}", this.authModeLine);
+
         if (env.IsDevelopment())
         {
             app.UseDeveloperExceptionPage();

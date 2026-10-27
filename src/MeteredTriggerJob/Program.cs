@@ -50,12 +50,12 @@ class Program
             key => configuration[key],
             (message, exception) => Console.WriteLine($"WARN {message} {exception}"));
         AppOnlyCredentialFactory.AssertStartupPreconditions();
-        Console.WriteLine(AppOnlyCredentialFactory.DescribeMode());
+        var fulfilmentAppId =
+            AppOnlyCredentialFactory.ReadSetting("FulfilmentAppId", new[] { "SaaSApiConfiguration:ClientId" })
+            ?? config.ClientId.ToString();
+        Console.WriteLine(AppOnlyCredentialFactory.DescribeMode(fulfilmentAppId: fulfilmentAppId));
         TokenCredential creds = AppOnlyCredentialFactory.Mode == AppOnlyAuthMode.Federated
-            ? AppOnlyCredentialFactory.GetFederatedCredential(
-                config.TenantId.ToString(),
-                AppOnlyCredentialFactory.ReadSetting("FulfilmentAppId", new[] { "SaaSApiConfiguration:ClientId" })
-                    ?? config.ClientId.ToString())
+            ? AppOnlyCredentialFactory.GetFederatedCredential(config.TenantId.ToString(), fulfilmentAppId)
             : new ClientSecretCredential(config.TenantId.ToString(), config.ClientId.ToString(), config.ClientSecret);
         var versionInfo = new AppVersionService(Assembly.GetExecutingAssembly()?.GetName()?.Version);
 

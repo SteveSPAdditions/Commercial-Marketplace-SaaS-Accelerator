@@ -135,7 +135,12 @@ namespace Marketplace.SaaS.Accelerator.Services.Utilities
         {
             if (Mode != AppOnlyAuthMode.Federated) return;
 
-            if (requireUserAssignedIdentity && string.IsNullOrWhiteSpace(ManagedIdentityClientId))
+            // The DEBUG DefaultAzureCredential escape hatch never uses the user-assigned id, so a
+            // local Federated run must not be forced to invent one.
+            var usingDevelopmentCredential = !HasManagedIdentityEndpoint() && DevelopmentCredentialAllowed();
+
+            if (requireUserAssignedIdentity && !usingDevelopmentCredential
+                && string.IsNullOrWhiteSpace(ManagedIdentityClientId))
                 throw new InvalidOperationException(
                     "Auth:Mode is Federated but Auth:ManagedIdentityClientId is not set. " +
                     "This host authenticates with a user-assigned managed identity; set the identity's " +
@@ -155,14 +160,16 @@ namespace Marketplace.SaaS.Accelerator.Services.Utilities
         /// The one startup line each host logs at Information level. Never includes secrets,
         /// tokens, cert paths or passwords -- ids are truncated, the certificate is identified by
         /// FILE NAME only (this codebase has no thumbprints). On legs whose legacy credential is a
-        /// client secret, pass null and the line reads "(legacy client secret)".
+        /// client secret, pass null and the line reads "(legacy client secret)". Hosts whose
+        /// fulfilment app id resolves through a legacy key pass the resolved value as
+        /// <paramref name="fulfilmentAppId"/> so the line shows what the call sites actually use.
         /// </summary>
-        public static string DescribeMode(string certFileName = null)
+        public static string DescribeMode(string certFileName = null, string fulfilmentAppId = null)
         {
             var appIds = "";
             var product = ReadSetting("ProductAppId");
             var teams = ReadSetting("TeamsAppId");
-            var fulfilment = ReadSetting("FulfilmentAppId");
+            var fulfilment = string.IsNullOrWhiteSpace(fulfilmentAppId) ? ReadSetting("FulfilmentAppId") : fulfilmentAppId;
             if (product != null) appIds += ", product=" + Shorten(product);
             if (teams != null) appIds += ", teams=" + Shorten(teams);
             if (fulfilment != null) appIds += ", fulfilment=" + Shorten(fulfilment);

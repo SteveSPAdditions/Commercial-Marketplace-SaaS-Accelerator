@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Marketplace.SaaS.Accelerator.Services.Utilities;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -15,11 +16,50 @@ namespace Marketplace.SaaS.Accelerator.Services.Test
     [TestClass]
     public sealed class AppOnlyCredentialFactoryTests
     {
+        // ReadSetting consults the process environment before the config delegate, so a stray
+        // Auth__* variable on the developer's machine or CI agent would change these outcomes.
+        // Clear them for the duration of each test and restore afterwards.
+        private static readonly string[] IsolatedEnvironmentVariables =
+        {
+            "Auth__Mode", "Auth:Mode",
+            "Auth__FulfilmentAppId", "Auth:FulfilmentAppId",
+            "Auth__ManagedIdentityClientId", "Auth:ManagedIdentityClientId",
+            "Auth__DevelopmentCredential", "Auth:DevelopmentCredential",
+            "SaaSApiConfiguration:ClientId",
+        };
+
+        private readonly Dictionary<string, string> savedEnvironment = new Dictionary<string, string>();
+
+        [TestInitialize]
+        public void Initialize()
+        {
+            foreach (var name in IsolatedEnvironmentVariables)
+            {
+                savedEnvironment[name] = Environment.GetEnvironmentVariable(name);
+                Environment.SetEnvironmentVariable(name, null);
+            }
+        }
+
         [TestCleanup]
         public void Cleanup()
         {
             AppOnlyCredentialFactory.ReadConfigSetting = null;
             AppOnlyCredentialFactory.ResetForTests();
+            foreach (var pair in savedEnvironment)
+                Environment.SetEnvironmentVariable(pair.Key, pair.Value);
+            savedEnvironment.Clear();
+        }
+
+        [TestMethod]
+        public void DescribeMode_UsesTheResolvedFulfilmentAppId_WhenPassedByTheHost()
+        {
+            AppOnlyCredentialFactory.ReadConfigSetting = _ => null;
+            AppOnlyCredentialFactory.ResetForTests();
+
+            var line = AppOnlyCredentialFactory.DescribeMode(fulfilmentAppId: "252c2797-0000-0000-0000-0000000000ab");
+
+            StringAssert.Contains(line, "fulfilment=252c");
+            StringAssert.Contains(line, "Certificate");
         }
 
         [TestMethod]
